@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: ilog
+  profiles:
+    active: local
+  jackson:
+    time-zone: Asia/Seoul
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc.time_zone: Asia/Seoul
+        format_sql: true
+
+---
+spring:
+  config.activate.on-profile: local
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ilog
+    username: ilog
+    password: ilog
+  jpa:
+    hibernate:
+      ddl-auto: update        # 로컬 전용. 운영은 DDL 스크립트 + validate
+    show-sql: true
+
+ilog:
+  auth:
+    dev-header-enabled: true  # 2단계 전용. A가 JWT 붙이면 false → 이후 삭제
