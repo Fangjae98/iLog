@@ -75,11 +75,18 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     @Column(name = "url", nullable = false, columnDefinition = "TEXT")
     private List<String> urls = new ArrayList<>();   // 빈 목록으로 시작 → URL을 안 넣어도 null이 아님
 
+    // 이 글에 붙은 해시태그 목록. 실제 저장은 post_hashtag 표(PostHashtag 엔티티)에 한 줄씩.
+    // mappedBy = "post"        : 연결 정보(post_id)는 PostHashtag 쪽 post 필드가 가지고 있다는 뜻
+    // cascade = ALL            : 글을 저장/삭제하면 태그도 함께 저장/삭제 ("같이 움직인다")
+    // orphanRemoval = true     : 이 목록에서 빼면 DB에서도 삭제 → 글 수정 시 태그 교체에 필요 (D-06)
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PostHashtag> hashtags = new ArrayList<>();
+
     // Setter가 없으므로 값은 이 생성자를 통해서만 넣을 수 있다.
     // @Builder 덕분에 Post.builder().title("...").build() 형태로 호출.
     // id와 작성/수정일은 DB와 JPA가 채우므로 파라미터에서 뺐다.
     @Builder
-    private Post(Long memberId, String title, String content, List<String> urls) {
+    private Post(Long memberId, String title, String content, List<String> urls, List<String> hashtags) {
         this.memberId = memberId;
         this.title = title;
         this.content = content;
@@ -87,5 +94,16 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
         if (urls != null) {
             this.urls = new ArrayList<>(urls);
         }
+        // 태그는 글자(String)로 받아서, 표 한 줄에 해당하는 PostHashtag 객체로 바꿔 담는다.
+        if (hashtags != null) {
+            hashtags.forEach(name -> this.hashtags.add(new PostHashtag(this, name)));
+        }
+    }
+
+    /** 응답을 만들 때 쓰기 편하도록 태그 객체 목록을 이름 목록으로 바꿔 준다. (예: ["여행", "맛집"]) */
+    public List<String> getHashtagNames() {
+        return hashtags.stream()
+                .map(PostHashtag::getName)
+                .toList();
     }
 }

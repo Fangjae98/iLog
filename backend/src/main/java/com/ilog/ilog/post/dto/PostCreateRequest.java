@@ -14,9 +14,9 @@ import java.util.List;
  * DTO(Data Transfer Object) = 데이터를 "옮기는" 용도의 상자.
  * 클라이언트가 보낸 JSON이 이 객체로 자동 변환된다.
  *
- *   { "title": "첫 글", "content": "안녕하세요", "urls": ["https://a.com", "https://b.com"] }
+ *   { "title": "첫 글", "content": "안녕하세요", "urls": ["https://a.com"], "hashtags": ["여행"] }
  *        ↓ (Spring이 자동 변환)
- *   new PostCreateRequest("첫 글", "안녕하세요", List.of("https://a.com", "https://b.com"))
+ *   new PostCreateRequest("첫 글", "안녕하세요", List.of("https://a.com"), List.of("여행"))
  *
  * 엔티티(Post)를 직접 받지 않는 이유:
  *   엔티티에는 id, memberId처럼 클라이언트가 마음대로 정하면 안 되는 값이 있다.
@@ -41,18 +41,28 @@ public record PostCreateRequest(
         // 목록 자체는 선택 입력(안 보내도 됨). 보낸다면 각 항목은 빈 문자열이면 안 된다.
         // <@NotBlank String> = "목록 안의 각 문자열"에 규칙을 거는 문법
         // TODO D-08 최대 개수 확정되면 @Size(max = N, message = "...")를 추가
-        List<@NotBlank(message = "URL은 빈 값일 수 없습니다.") String> urls
+        List<@NotBlank(message = "URL은 빈 값일 수 없습니다.") String> urls,
+
+        // 해시태그. JSON에서는 "hashtags": ["여행", "맛집"] 형태로 보낸다. 안 보내도 됨.
+        // 최대 개수(10개) 검사는 여기가 아니라 Service에서 한다.
+        // 이유: 팀이 만들어 둔 전용 에러 코드(HASHTAG_LIMIT_EXCEEDED)로 응답하기 위해서.
+        // (여기서 @Size로 막으면 일반 입력값 오류인 INVALID_INPUT으로 나간다)
+        List<@NotBlank(message = "해시태그는 빈 값일 수 없습니다.") String> hashtags
 ) {
 
     // DTO → Entity 변환. Service에서 호출한다.
     // memberId는 요청 JSON이 아니라 로그인 정보에서 꺼내 넘겨받는다.
     // (JSON으로 받으면 남의 회원 번호를 넣어서 대신 글을 쓸 수 있기 때문)
-    public Post toEntity(Long memberId) {
+    //
+    // hashtags를 파라미터로 따로 받는 이유:
+    //   Service에서 '#' 제거·중복 제거 등으로 다듬은 태그 목록을 넘겨주기 때문.
+    public Post toEntity(Long memberId, List<String> refinedHashtags) {
         return Post.builder()
                 .memberId(memberId)
                 .title(title)
                 .content(content)
                 .urls(urls)
+                .hashtags(refinedHashtags)
                 .build();
     }
 }

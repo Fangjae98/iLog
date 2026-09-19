@@ -32,7 +32,12 @@ import org.springframework.web.bind.annotation.RestController;
  *   X-Member-Id: 1
  *   Content-Type: application/json
  *
- *   { "title": "첫 글", "content": "안녕하세요" }
+ *   {
+ *     "title": "첫 글",
+ *     "content": "안녕하세요",
+ *     "urls": ["https://a.com"],      // 선택, 여러 개 가능
+ *     "hashtags": ["여행", "맛집"]     // 선택, 최대 10개
+ *   }
  */
 @RestController                  // 반환값을 JSON으로 바꿔서 응답하는 컨트롤러
 @RequestMapping("/api/v1/posts") // 이 클래스의 모든 API 주소 앞에 붙는 공통 경로

@@ -24,6 +24,7 @@ public record PostResponse(
         String title,
         String content,
         List<String> urls,           // URL이 없으면 빈 목록 []
+        List<String> hashtags,       // 태그가 없으면 빈 목록 []
         LocalDateTime createdAt,
         LocalDateTime updatedAt      // 처음 작성할 때는 null (수정해야 값이 생김)
 ) {
@@ -39,6 +40,7 @@ public record PostResponse(
                 // 그래서 이 변환은 Service의 @Transactional 메서드 안에서 호출해야 한다.
                 // List.copyOf = JPA가 관리하는 목록을 일반 목록으로 복사
                 List.copyOf(post.getUrls()),
+                post.getHashtagNames(),   // PostHashtag 객체 목록 → 이름 목록 (["여행", "맛집"])
                 post.getCreatedAt(),   // BaseTimeEntity에서 물려받은 getter
                 post.getUpdatedAt()
         );
