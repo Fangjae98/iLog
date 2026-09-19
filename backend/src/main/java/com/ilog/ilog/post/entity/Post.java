@@ -22,34 +22,70 @@ import lombok.Getter;
 // JPA는 내부적으로 엔티티를 다룰 때 기본 생성자가 필수입니다.
 import lombok.NoArgsConstructor;
 
-@Entity
-@Table(name = "posts")
-@Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)   // JPA 전용. 외부에서는 빌더로만 생성
-public class Post extends BaseTimeEntity {
+// 여러 개의 값을 순서대로 담는 목록(List)과 그 기본 구현체(ArrayList)입니다. URL 여러 개를 담을 때 씁니다.
+import java.util.ArrayList;
+import java.util.List;
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+/*
+ * [게시글 작성 흐름] ⑤ Entity  ← 지금 이 파일
+ *
+ *   ① Client → ② Controller → ③ Request DTO → ④ Service → ⑤ Entity → ⑥ Repository → DB
+ *                                                                               ↓
+ *   ⑧ Client ← ② Controller ← ⑦ Response DTO ← ④ Service ←──────── 저장된 Entity
+ *
+ * 엔티티 = DB 테이블 한 줄(row)을 자바 객체로 표현한 것.
+ * Post 객체 1개 = posts 테이블의 게시글 1개.
+ * 이 클래스를 바탕으로 JPA가 INSERT/SELECT 같은 SQL을 대신 만들어 준다.
+ */
+@Entity                       // "이 클래스는 DB 테이블과 연결된 엔티티다"라고 JPA에게 알려줌
+@Table(name = "posts")        // 연결할 테이블 이름. 없으면 클래스명(post)을 그대로 씀
+@Getter                       // 값을 읽는 getId(), getTitle()... 자동 생성
+@NoArgsConstructor(access = AccessLevel.PROTECTED)   // JPA 전용 기본 생성자. protected라 우리 코드에서는 new Post() 불가 → 빌더로만 생성
+public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속 → created_at, updated_at 컬럼이 자동으로 따라옴
+
+    @Id                                                   // 이 필드가 기본키(PK), 즉 게시글을 구분하는 고유 번호
+    @GeneratedValue(strategy = GenerationType.IDENTITY)   // 번호는 우리가 넣지 않고 DB가 1, 2, 3... 자동으로 매김
     private Long id;
 
-    // Member 엔티티가 생기면 @ManyToOne 연관관계로 교체
-    @Column(name = "member_id", nullable = false)
+    // 글쓴이의 회원 번호. 지금은 숫자만 저장하고,
+    // Member 엔티티가 생기면 @ManyToOne 연관관계로 교체 예정
+    @Column(name = "member_id", nullable = false)         // 자바 필드명은 memberId, DB 컬럼명은 member_id / NOT NULL
     private Long memberId;
 
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 100)               // VARCHAR(100) NOT NULL
     private String title;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, columnDefinition = "TEXT")  // 본문은 길 수 있으니 길이 제한 없는 TEXT 타입
     private String content;
 
-    @Column(columnDefinition = "TEXT")
-    private String url;
+    // 한 글에 URL이 여러 개 → posts 표의 한 칸에 담을 수 없으므로 별도의 표(post_url)에 한 줄씩 저장한다.
+    //
+    //   posts                         post_url
+    //   id | title   | ...           post_id | sort_order | url
+    //   1  | 첫 글   |               1       | 0          | https://a.com
+    //                                 1       | 1          | https://b.com
+    //
+    // @ElementCollection  : "문자열 목록을 별도 표에 저장해 줘"라고 JPA에 알려줌 (URL은 문자열뿐이라 엔티티까지 만들 필요 없음)
+    // @CollectionTable    : 그 표의 이름(post_url)과, 어느 글의 URL인지 가리키는 컬럼(post_id)
+    // @OrderColumn        : 사용자가 입력한 순서를 기억하는 컬럼(sort_order). 없으면 조회할 때 순서가 섞일 수 있음
+    // 게시글을 저장·삭제하면 URL도 같이 저장·삭제된다.
+    @ElementCollection
+    @CollectionTable(name = "post_url", joinColumns = @JoinColumn(name = "post_id"))
+    @OrderColumn(name = "sort_order")
+    @Column(name = "url", nullable = false, columnDefinition = "TEXT")
+    private List<String> urls = new ArrayList<>();   // 빈 목록으로 시작 → URL을 안 넣어도 null이 아님
 
+    // Setter가 없으므로 값은 이 생성자를 통해서만 넣을 수 있다.
+    // @Builder 덕분에 Post.builder().title("...").build() 형태로 호출.
+    // id와 작성/수정일은 DB와 JPA가 채우므로 파라미터에서 뺐다.
     @Builder
-    private Post(Long memberId, String title, String content, String url) {
+    private Post(Long memberId, String title, String content, List<String> urls) {
         this.memberId = memberId;
         this.title = title;
         this.content = content;
-        this.url = url;
+        // 받은 목록을 그대로 쓰지 않고 새 목록에 복사 → 바깥에서 원본 목록을 바꿔도 엔티티에 영향 없음
+        if (urls != null) {
+            this.urls = new ArrayList<>(urls);
+        }
     }
 }
