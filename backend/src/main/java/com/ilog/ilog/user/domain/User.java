@@ -49,6 +49,10 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false, length = 60)
     private String password;
 
+    /** 실명. 수정 불가, 마이페이지(비밀번호 재확인 후)와 임시 비밀번호 발급 본인 확인에만 쓴다. */
+    @Column(nullable = false, length = 50)
+    private String name;
+
     /** 임시 비밀번호로 로그인한 상태인지. global 의 LoginUser.tempPassword 와 대응. */
     @Column(name = "temp_password", nullable = false)
     private boolean tempPassword;
@@ -58,10 +62,11 @@ public class User extends BaseTimeEntity {
     private LocalDateTime withdrawnAt;
 
     @Builder
-    private User(String email, String nickname, String password) {
+    private User(String email, String nickname, String password, String name) {
         this.email = email;
         this.nickname = nickname;
         this.password = password;
+        this.name = name;
         this.tempPassword = false;
     }
 

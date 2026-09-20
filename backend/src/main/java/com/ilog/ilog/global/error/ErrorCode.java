@@ -12,6 +12,7 @@ public enum ErrorCode {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     INVALID_PASSWORD_FORMAT(HttpStatus.BAD_REQUEST, "비밀번호 형식이 올바르지 않습니다."),
     PASSWORD_CONFIRM_MISMATCH(HttpStatus.BAD_REQUEST, "비밀번호 확인이 일치하지 않습니다."),
+    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "비밀번호가 일치하지 않습니다."),          // 401 이면 프론트가 로그인 만료로 처리해 로그아웃됨
     PASSWORD_REUSED(HttpStatus.BAD_REQUEST, "최근 사용한 비밀번호는 사용할 수 없습니다."),
     NICKNAME_UNCHANGED(HttpStatus.BAD_REQUEST, "현재 닉네임과 같습니다."),           // 프론트 처리 시 제거
     HASHTAG_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "해시태그 개수를 초과했습니다."),    // D-09 후 사용
@@ -20,7 +21,6 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다."),             // [논의 필요]
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
-    PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "비밀번호가 일치하지 않습니다."),      // [논의 필요] 400 전환 검토
     TEMP_PASSWORD_EXPIRED(HttpStatus.UNAUTHORIZED, "임시 비밀번호가 만료되었습니다."), // D-12 후 사용
 
     // 403

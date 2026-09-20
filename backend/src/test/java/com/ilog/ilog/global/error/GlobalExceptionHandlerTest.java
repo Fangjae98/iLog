@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** comm.md 8장 "동작 확인" 항목: 에러 응답 형식과 @Login 주입 */
-@WebMvcTest
+@WebMvcTest(controllers = GlobalExceptionHandlerTest.TestController.class)   // 다른 도메인 컨트롤러(와 그 서비스 의존성)가 딸려오지 않게 제한
 @Import({SecurityConfig.class, GlobalExceptionHandlerTest.TestController.class})
 class GlobalExceptionHandlerTest {
 
