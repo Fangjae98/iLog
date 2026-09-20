@@ -15,7 +15,7 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 @Component
 public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver {
 
-    private static final String DEV_HEADER = "X-User-Id";
+    public static final String DEV_HEADER = "X-User-Id";   // Swagger 문서(OpenApiConfig)도 이 값을 쓴다
 
     @Value("${ilog.auth.dev-header-enabled:false}")
     private boolean devHeaderEnabled;
