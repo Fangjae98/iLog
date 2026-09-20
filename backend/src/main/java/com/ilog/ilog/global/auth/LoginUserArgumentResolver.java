@@ -13,9 +13,9 @@ import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
 @Component
-public class LoginMemberArgumentResolver implements HandlerMethodArgumentResolver {
+public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver {
 
-    private static final String DEV_HEADER = "X-Member-Id";
+    public static final String DEV_HEADER = "X-User-Id";   // Swagger 문서(OpenApiConfig)도 이 값을 쓴다
 
     @Value("${ilog.auth.dev-header-enabled:false}")
     private boolean devHeaderEnabled;
@@ -23,17 +23,17 @@ public class LoginMemberArgumentResolver implements HandlerMethodArgumentResolve
     @Override
     public boolean supportsParameter(MethodParameter parameter) {
         return parameter.hasParameterAnnotation(Login.class)
-                && parameter.getParameterType().equals(LoginMember.class);
+                && parameter.getParameterType().equals(LoginUser.class);
     }
 
     @Override
     public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mav,
                                   NativeWebRequest webRequest, WebDataBinderFactory binderFactory) {
 
-        // 3단계: JWT 필터가 SecurityContext에 LoginMember를 principal로 넣어둔다
+        // 3단계: JWT 필터가 SecurityContext에 LoginUser를 principal로 넣어둔다
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof LoginMember loginMember) {
-            return loginMember;
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser;
         }
 
         // 2단계 전용: 개발용 헤더
@@ -41,7 +41,7 @@ public class LoginMemberArgumentResolver implements HandlerMethodArgumentResolve
             String header = webRequest.getHeader(DEV_HEADER);
             if (header != null) {
                 try {
-                    return new LoginMember(Long.parseLong(header), false);
+                    return new LoginUser(Long.parseLong(header), false);
                 } catch (NumberFormatException e) {   // 숫자가 아니면 500 대신 401
                     throw new BusinessException(ErrorCode.UNAUTHORIZED);
                 }
