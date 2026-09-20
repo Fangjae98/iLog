@@ -1,0 +1,18 @@
+# 로컬 전용 설정 견본입니다.
+# 이 파일을 application-local.properties 로 복사한 뒤 실제 값을 채우세요.
+#
+#   PowerShell : Copy-Item application-local.properties.example application-local.properties
+#   bash/zsh   : cp application-local.properties.example application-local.properties
+#
+# application-local.properties 는 backend/.gitignore 에 등록되어 커밋되지 않습니다.
+# 실제 DB 비밀번호는 팀 채팅으로 공유합니다.
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/ilogdb
+spring.datasource.username=여기에_DB계정명
+spring.datasource.password=여기에_비밀번호
+
+# 로컬에서 실행되는 SQL 을 보고 싶을 때 (format_sql 은 application.properties 에 이미 켜져 있음)
+spring.jpa.show-sql=true
+
+# 참고: 5432 포트가 이미 쓰이고 있다면 (로컬에 PostgreSQL 을 직접 설치한 경우)
+# docker-compose.yml 의 포트를 "5433:5432" 로 바꾸고 위 url 도 5433 으로 맞추세요.
