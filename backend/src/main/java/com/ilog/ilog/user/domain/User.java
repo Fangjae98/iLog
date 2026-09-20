@@ -37,11 +37,11 @@ public class User extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** MEMBER_DUPLICATE_EMAIL / LOGIN_FAILED 판정 대상. RFC 5321 상한이 254자. */
+    /** USER_DUPLICATE_EMAIL / LOGIN_FAILED 판정 대상. RFC 5321 상한이 254자. */
     @Column(nullable = false, length = 254)
     private String email;
 
-    /** MEMBER_DUPLICATE_NICKNAME / NICKNAME_UNCHANGED 판정 대상. */
+    /** USER_DUPLICATE_NICKNAME / NICKNAME_UNCHANGED 판정 대상. */
     @Column(nullable = false, length = 20)
     private String nickname;
 
@@ -49,11 +49,11 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false, length = 60)
     private String password;
 
-    /** 임시 비밀번호로 로그인한 상태인지. global 의 LoginMember.tempPassword 와 대응. */
+    /** 임시 비밀번호로 로그인한 상태인지. global 의 LoginUser.tempPassword 와 대응. */
     @Column(name = "temp_password", nullable = false)
     private boolean tempPassword;
 
-    /** 탈퇴 시각. null 이면 활성 회원. MEMBER_WITHDRAWN / REJOIN_RESTRICTED 판정에 사용. */
+    /** 탈퇴 시각. null 이면 활성 회원. USER_WITHDRAWN / REJOIN_RESTRICTED 판정에 사용. */
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 

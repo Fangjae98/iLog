@@ -1,7 +1,7 @@
 package com.ilog.ilog.global.error;
 
 import com.ilog.ilog.global.auth.Login;
-import com.ilog.ilog.global.auth.LoginMember;
+import com.ilog.ilog.global.auth.LoginUser;
 import com.ilog.ilog.global.config.SecurityConfig;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -110,24 +110,24 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void X_Member_Id_헤더_없이_Login_API면_401() throws Exception {
+    void X_User_Id_헤더_없이_Login_API면_401() throws Exception {
         mockMvc.perform(get("/api/v1/test/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
-    void X_Member_Id가_숫자가_아니면_401() throws Exception {
-        mockMvc.perform(get("/api/v1/test/me").header("X-Member-Id", "abc"))
+    void X_User_Id가_숫자가_아니면_401() throws Exception {
+        mockMvc.perform(get("/api/v1/test/me").header("X-User-Id", "abc"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
-    void X_Member_Id_헤더가_있으면_LoginMember_주입() throws Exception {
-        mockMvc.perform(get("/api/v1/test/me").header("X-Member-Id", "1"))
+    void X_User_Id_헤더가_있으면_LoginUser_주입() throws Exception {
+        mockMvc.perform(get("/api/v1/test/me").header("X-User-Id", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.memberId").value(1))
+                .andExpect(jsonPath("$.userId").value(1))
                 .andExpect(jsonPath("$.tempPassword").value(false));
     }
 
@@ -162,8 +162,8 @@ class GlobalExceptionHandlerTest {
         }
 
         @GetMapping("/api/v1/test/me")
-        LoginMember me(@Login LoginMember loginMember) {
-            return loginMember;
+        LoginUser me(@Login LoginUser loginUser) {
+            return loginUser;
         }
     }
 }

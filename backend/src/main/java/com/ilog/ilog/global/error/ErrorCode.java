@@ -25,10 +25,10 @@ public enum ErrorCode {
 
     // 403
     POST_NOT_OWNER(HttpStatus.FORBIDDEN, "작성자만 수정·삭제할 수 있습니다."),
-    MEMBER_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다."),                  // [논의 필요]
+    USER_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다."),                    // [논의 필요]
 
     // 404
-    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "회원 정보를 찾을 수 없습니다."),
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "회원 정보를 찾을 수 없습니다."),
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다."),
     HASHTAG_NOT_FOUND(HttpStatus.NOT_FOUND, "해시태그를 찾을 수 없습니다."),
     API_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 API입니다."),               // [추가 제안]
@@ -37,8 +37,8 @@ public enum ErrorCode {
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 요청 방식입니다."), // [추가 제안]
 
     // 409
-    MEMBER_DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
-    MEMBER_DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
+    USER_DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
+    USER_DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     REJOIN_RESTRICTED(HttpStatus.CONFLICT, "탈퇴 후 재가입이 제한된 이메일입니다."),
 
     // 500

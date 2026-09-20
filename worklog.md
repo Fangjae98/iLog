@@ -1,6 +1,6 @@
 # 작업 로그
 
-## 2026-09-20 — develop 인프라 반영 + BE 설정 정리 + user 엔티티 revise
+## 2026-09-20 — develop 인프라 반영 + BE 설정 정리 + user 엔티티 revise + 명명 통일
 
 작업자: kitaek
 
@@ -42,9 +42,9 @@ spring.jpa.properties.hibernate.format_sql=true
 ilog.auth.dev-header-enabled=true
 ```
 
-`ilog.auth.dev-header-enabled`는 `LoginMemberArgumentResolver`가 참조합니다.
+`ilog.auth.dev-header-enabled`는 `LoginUserArgumentResolver`가 참조합니다.
 기본값이 `false`라 앱이 죽지는 않지만, 이 값이 없으면
-`X_Member_Id_헤더가_있으면_LoginMember_주입` 테스트가 401로 실패합니다.
+`X_Member_Id_헤더가_있으면_LoginUser_주입` 테스트가 401로 실패합니다.
 JWT 적용 후에는 `false`로 바꾸고 이후 삭제할 값입니다.
 
 **`application-local.properties.example` 추가.**
@@ -68,9 +68,9 @@ global과 맞춘 부분:
 | 항목 | 내용 |
 |---|---|
 | `BaseTimeEntity` 상속 | `created_at` / `updated_at`을 JPA Auditing으로 자동 기록 |
-| `tempPassword` 필드 | `LoginMember(Long memberId, boolean tempPassword)`와 대응 |
-| `withdrawnAt` 필드 | `MEMBER_WITHDRAWN` / `REJOIN_RESTRICTED` 판정용. null이면 활성 회원 |
-| `email` / `nickname` unique | `MEMBER_DUPLICATE_EMAIL` / `MEMBER_DUPLICATE_NICKNAME` 판정용 |
+| `tempPassword` 필드 | `LoginUser(Long userId, boolean tempPassword)`와 대응 |
+| `withdrawnAt` 필드 | `USER_WITHDRAWN` / `REJOIN_RESTRICTED` 판정용. null이면 활성 회원 |
+| `email` / `nickname` unique | `USER_DUPLICATE_EMAIL` / `USER_DUPLICATE_NICKNAME` 판정용 |
 | `password` 60자 | `SecurityConfig`의 `BCryptPasswordEncoder` 해시 길이 |
 | 기본 생성자 `PROTECTED` | JPA 요구사항은 만족하되 외부 생성은 막음. 생성은 `@Builder`로 |
 
@@ -91,19 +91,45 @@ global과 맞춘 부분:
 
 ---
 
+### 4. global 명명을 `User`로 통일
+
+global이 `Member`, user/post가 `User`/`member_id`로 갈려 있었습니다.
+`User`가 맞는 방향이라 global 쪽을 고쳤습니다.
+
+| 변경 전 | 변경 후 |
+|---|---|
+| `LoginMember` | `LoginUser` |
+| `LoginMemberArgumentResolver` | `LoginUserArgumentResolver` |
+| `LoginMember.memberId` | `LoginUser.userId` |
+| `MEMBER_NOT_FOUND` | `USER_NOT_FOUND` |
+| `MEMBER_WITHDRAWN` | `USER_WITHDRAWN` |
+| `MEMBER_DUPLICATE_EMAIL` | `USER_DUPLICATE_EMAIL` |
+| `MEMBER_DUPLICATE_NICKNAME` | `USER_DUPLICATE_NICKNAME` |
+| 개발용 헤더 `X-Member-Id` | `X-User-Id` |
+
+**지금이 바꾸기 가장 싼 시점이었습니다.** 다른 브랜치(`feat/auth-foundation`,
+`feat/be/post-create`, `fe`)를 전부 확인했는데 `LoginMember`나 `MEMBER_*`로
+코드를 짠 곳이 아직 없었습니다. post-create에 걸린 5개 파일은 그 브랜치가
+`be`를 머지해서 딸려온 global 파일 자체였습니다.
+
+알아둘 점:
+
+- **응답 JSON 필드명이 바뀝니다.** `LoginUser`를 그대로 반환하면
+  `memberId` → `userId`. FE에서 아직 쓰는 곳은 없습니다.
+- **개발용 헤더가 `X-User-Id`로 바뀌었습니다.** 2단계 전용이고 FE에서
+  사용하는 곳은 없지만, API 테스트 중이라면 헤더명을 바꿔야 합니다.
+- ErrorCode의 한글 메시지("회원 정보를 찾을 수 없습니다")는 그대로 뒀습니다.
+  사용자에게 보이는 문구라 식별자와 별개로 판단할 문제입니다. 바꿀지 정해주세요.
+- `feat/be/post-create`의 `Post.java`는 `member_id` 컬럼을 쓰고 있습니다.
+  그 브랜치에서 `user_id`로 맞춰야 합니다. (현재 그 파일은 컴파일되지 않는 WIP 상태)
+
+---
+
 ## 결정이 필요한 것
 
-### 1. `User` vs `Member` — 명명이 갈려 있습니다 (우선 처리 필요)
+### 1. ~~`User` vs `Member`~~ — 해결됨 (위 4번 작업으로 반영)
 
-global은 전부 `Member`인데 user/post 쪽은 `User`/`member_id`입니다.
-
-- global: `LoginMember`, `MEMBER_NOT_FOUND`, `MEMBER_DUPLICATE_EMAIL`, `MEMBER_WITHDRAWN` …
-- 이 브랜치: `User` 클래스, `users` 테이블
-- `feat/be/post-create`: `member_id` 컬럼
-
-지금은 원래 브랜치와 테이블명(`users`)을 존중해 `User`로 두었습니다.
-`Member`로 통일하려면 이 브랜치에서 클래스·패키지·테이블명을 바꾸는 편이
-나중에 서비스·컨트롤러까지 퍼진 뒤 바꾸는 것보다 훨씬 쌉니다.
+`User`로 통일하기로 결정. global 쪽 명명이 잘못된 것이었습니다.
 
 ### 2. 아직 안 만든 것 (ErrorCode에는 있으나 스펙이 없어 보류)
 
