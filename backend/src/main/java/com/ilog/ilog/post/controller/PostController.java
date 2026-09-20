@@ -1,7 +1,7 @@
 package com.ilog.ilog.post.controller;
 
 import com.ilog.ilog.global.auth.Login;
-import com.ilog.ilog.global.auth.LoginMember;
+import com.ilog.ilog.global.auth.LoginUser;
 import com.ilog.ilog.post.dto.PostCreateRequest;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
@@ -22,21 +22,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /*
- * ===========================================================================
- * TODO [Member → User 이름 통일] post 패키지에서 이 파일만 옛 이름을 쓰고 있다.
- *
- * 팀에서 global의 Member를 User로 통일했지만(feat/be/user-revise 브랜치),
- * 아직 be 브랜치에 합쳐지지 않아 내 작업 공간에는 LoginUser 클래스가 없다.
- * 지금 바꾸면 컴파일이 안 되므로, 합쳐진 뒤 아래 3가지를 한 번에 바꾼다.
- *
- *   1) import  : LoginMember → LoginUser
- *   2) 파라미터 : LoginMember loginMember → LoginUser loginUser   (5곳)
- *   3) 호출     : loginMember.memberId() → loginUser.userId()     (4곳)
- *
- * 개발용 헤더 X-Member-Id → X-User-Id 는 팀원 코드에서 바뀐다.
- * post 패키지의 나머지 코드는 이미 userId / user_id 로 바꿔 두었다.
- * ===========================================================================
- *
  * [게시글 작성 흐름] ② Controller  ← 지금 이 파일 (요청이 가장 먼저 도착하는 곳)
  *
  *   ① Client ──POST /api/v1/posts──→ ② Controller → ③ Request DTO → ④ Service → ⑤ Entity → ⑥ Repository → DB
@@ -51,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 요청 예시 (개발 단계에서는 로그인 대신 헤더로 회원 번호를 보낸다)
  *
  *   POST /api/v1/posts
- *   X-Member-Id: 1                  ← 팀원 변경 반영 후 X-User-Id
+ *   X-User-Id: 1
  *   Content-Type: application/json
  *
  *   {
@@ -72,7 +57,7 @@ public class PostController {
      * 게시글 작성 API (명세 FN-PST-001)
      *
      * 파라미터 설명
-     *   @Login LoginMember loginMember
+     *   @Login LoginUser loginUser
      *     → 로그인한 회원 정보. global/auth에서 만들어 둔 기능이 자동으로 넣어 준다.
      *       로그인 정보가 없으면 여기까지 오지 않고 401(UNAUTHORIZED) 에러가 난다.
      *
@@ -84,11 +69,10 @@ public class PostController {
      * 성공 응답: 201 Created + 저장된 게시글 JSON
      */
     @PostMapping   // HTTP POST 요청 + 주소 /api/v1/posts 를 이 메서드가 처리
-    public ResponseEntity<PostResponse> create(@Login LoginMember loginMember,
+    public ResponseEntity<PostResponse> create(@Login LoginUser loginUser,
                                                @Valid @RequestBody PostCreateRequest request) {
 
-        // TODO 팀원 변경 반영 후: loginUser.userId()
-        PostResponse response = postService.create(loginMember.memberId(), request);
+        PostResponse response = postService.create(loginUser.userId(), request);
 
         // ResponseEntity = 응답 상태코드 + 본문을 함께 담는 상자.
         // 새로 "만들었다"는 의미로 200(OK) 대신 201(CREATED)을 쓴다.
@@ -111,10 +95,9 @@ public class PostController {
      * (회원 번호를 요청으로 받으면 남의 글 목록을 볼 수 있게 되므로)
      */
     @GetMapping(params = "author=me")
-    public ResponseEntity<PostPageResponse> getMyPosts(@Login LoginMember loginMember,
+    public ResponseEntity<PostPageResponse> getMyPosts(@Login LoginUser loginUser,
                                                        @RequestParam(defaultValue = "0") int page) {
-        // TODO 팀원 변경 반영 후: loginUser.userId()
-        return ResponseEntity.ok(postService.getMyPosts(loginMember.memberId(), page));
+        return ResponseEntity.ok(postService.getMyPosts(loginUser.userId(), page));
     }
 
     /**
@@ -132,11 +115,11 @@ public class PostController {
      *
      * 로그인한 회원만 볼 수 있다. (명세서 FN-PST-002 게시글 읽기 - 액터: 회원)
      * @Login 파라미터를 적어 두기만 하면 로그인 검사가 되고, 로그인 정보가 없으면 401로 막힌다.
-     * 지금은 "누가 보는지"를 쓸 일이 없어서 loginMember 값을 사용하지는 않는다.
+     * 지금은 "누가 보는지"를 쓸 일이 없어서 loginUser 값을 사용하지는 않는다.
      * (나중에 '내 글인지 표시' 같은 기능이 생기면 여기서 쓰면 된다)
      */
     @GetMapping("/{postId}")
-    public ResponseEntity<PostResponse> getPost(@Login LoginMember loginMember,
+    public ResponseEntity<PostResponse> getPost(@Login LoginUser loginUser,
                                                 @PathVariable Long postId) {
         // 조회는 "잘 가져왔다"는 뜻의 200 OK. ResponseEntity.ok(...)가 그 줄임 표현이다.
         return ResponseEntity.ok(postService.getPost(postId));
@@ -156,11 +139,10 @@ public class PostController {
      * 성공 응답: 200 OK + 수정된 게시글 JSON
      */
     @PutMapping("/{postId}")
-    public ResponseEntity<PostResponse> update(@Login LoginMember loginMember,
+    public ResponseEntity<PostResponse> update(@Login LoginUser loginUser,
                                                @PathVariable Long postId,
                                                @Valid @RequestBody PostUpdateRequest request) {
-        // TODO 팀원 변경 반영 후: loginUser.userId()
-        return ResponseEntity.ok(postService.update(loginMember.memberId(), postId, request));
+        return ResponseEntity.ok(postService.update(loginUser.userId(), postId, request));
     }
 
     /**
@@ -174,10 +156,9 @@ public class PostController {
      *   = "잘 처리했고, 돌려줄 내용은 없다"는 뜻. 지워진 글을 응답에 담을 이유가 없어서 204를 쓴다.
      */
     @DeleteMapping("/{postId}")
-    public ResponseEntity<Void> delete(@Login LoginMember loginMember,
+    public ResponseEntity<Void> delete(@Login LoginUser loginUser,
                                        @PathVariable Long postId) {
-        // TODO 팀원 변경 반영 후: loginUser.userId()
-        postService.delete(loginMember.memberId(), postId);
+        postService.delete(loginUser.userId(), postId);
         return ResponseEntity.noContent().build();
     }
 }
