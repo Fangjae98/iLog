@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>iLog 프론트 프로토타입</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ===== 토큰 (디자인 시스템 캡처 기준: 글씨체 · 컴포넌트 · 포스트잇 4색) ===== */
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+
+  --bg: #FFFFFF;
+  --paper: #FFFFFF;
+  --line: #D1CBC1;
+  --line-soft: #E5E0D3;
+  --head: #F3EFE6;
+
+  --text: #261F1A;
+  --text-2: #2B2117;
+  --sub: #564E48;
+  --muted: #867F79;
+  --label: #8A8072;
+  --placeholder: #B8B0A2;
+
+  --accent: #D15C53;
+  --btn: #C1503F;
+  --btn-text: #FBF8F4;
+  --input: #C9C2B2;
+  --ok: #2F8A4A;
+  --hashtag: #0F4C6B;
+  --chip-x: #E5E0D3;
+  --row-hover: #FAF8F4;
+
+  --modal: #FFFFFF;
+  --overlay: rgba(43, 33, 23, 0.35);
+
+  --postit-yellow: #F6E084;   /* 기본 · 이번 주 주제 */
+  --postit-pink: #FFC4C8;     /* 마감 · 오늘 미작성 */
+  --postit-blue: #B1E5FF;     /* 체크리스트 · 안내 */
+  --postit-green: #C1EDB7;    /* 연속 기록 · 칭찬 */
+  --postit-text: #261F1A;
+
+  --font-hand: 'Gaegu', 'Noto Sans KR', cursive;
+  --font-body: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 16px; line-height: 1.5; }
+a { color: inherit; }
+h1, h2, p { margin: 0; }
+.num { font-family: var(--font-mono); font-feature-settings: "tnum"; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+:focus-visible { outline: 2px solid var(--btn); outline-offset: 2px; }
+
+/* ===== 화면 프레임 (종이 한 장, 거의 직각 + 짧은 그림자) ===== */
+.page {
+  max-width: 720px;
+  min-height: 560px;
+  margin: 32px auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(38, 31, 26, 0.08);
+  padding: 26px 40px 48px;
+}
+.page.flush { padding: 0; min-height: 420px; }
+@media (max-width: 760px) {
+  .page { margin: 0; border-width: 0 0 1px; border-radius: 0; padding: 20px 18px 36px; min-height: 100vh; }
+  .page.flush { min-height: 0; }
+}
+
+/* 상단 */
+.top { display: flex; align-items: center; gap: 16px; height: 50px; border-bottom: 1px solid var(--line); }
+.logo-box { font-family: var(--font-hand); font-weight: 700; font-size: 26px; line-height: 1; text-decoration: none; color: var(--text); flex: none; }
+.tabs { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.tab { font-size: 14px; font-weight: 500; color: var(--sub); text-decoration: none; padding: 4px 10px; border-radius: 2px; white-space: nowrap; }
+.tab:hover { color: var(--text); }
+.tab[aria-current="page"] { background: var(--postit-pink); color: var(--postit-text); font-weight: 700; }
+.logout { flex: none; }
+.auth-top { border-bottom: 1px solid var(--line); padding: 4px 0 14px; }
+.auth-top h1 { font-family: var(--font-hand); font-weight: 700; font-size: 28px; line-height: 35px; }
+
+/* ===== 버튼 ===== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 36px; padding: 8px 18px;
+  background: transparent; color: var(--text-2);
+  border: 1px solid var(--input); border-radius: 3px;
+  font-family: var(--font-body); font-size: 13px; font-weight: 400; line-height: 16px;
+  cursor: pointer; white-space: nowrap; text-decoration: none;
+}
+.btn:hover { background: rgba(193, 80, 63, 0.06); }
+.btn-primary { background: var(--btn); border-color: var(--btn); color: var(--btn-text); }
+.btn-primary:hover { background: var(--btn); filter: brightness(0.93); }
+.btn-sm { min-height: 26px; padding: 3px 10px; font-size: 12px; }
+.btn-xs { min-height: 30px; padding: 4px 12px; font-size: 13px; }
+.btn-block { width: 100%; }
+.btn-plain { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ===== 입력 박스 (밑줄형) ===== */
+.box {
+  width: 100%; height: 36px; padding: 6px 2px;
+  background: transparent; color: var(--text-2);
+  border: 0; border-bottom: 1px solid var(--input); border-radius: 0;
+  font-family: var(--font-body); font-size: 14px;
+}
+.box::placeholder { color: var(--placeholder); }
+.box:focus { outline: none; border-bottom: 2px solid var(--btn); padding-bottom: 5px; }
+textarea.box { height: auto; min-height: 110px; padding: 10px 12px; border: 1px solid var(--input); border-radius: 3px; line-height: 1.7; resize: vertical; }
+textarea.box:focus { border: 2px solid var(--btn); padding: 9px 11px; }
+select.box { cursor: pointer; }
+.field { margin-bottom: 26px; }
+.label { display: block; font-size: 11px; line-height: 13px; color: var(--label); margin-bottom: 4px; }
+.label-lg { display: block; font-size: 12px; font-weight: 500; line-height: 15px; color: var(--label); margin-bottom: 6px; }
+.label-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.label-row .label-lg { margin: 0; }
+.helper { font-size: 12px; color: var(--muted); }
+.row { display: flex; align-items: flex-end; gap: 10px; }
+.row .box { flex: 1; min-width: 0; }
+.msg { font-size: 12px; line-height: 15px; margin-top: 6px; }
+.msg:empty { display: none; }
+.msg.err { color: var(--accent); }
+.msg.ok { color: var(--ok); }
+.msg.hint { color: var(--muted); }
+.label-row .msg { margin: 0; }
+/* 입력 불가 상태 */
+.readonly { min-height: 36px; padding: 7px 2px 6px; border-bottom: 2px solid var(--text-2); font-size: 14px; color: var(--text-2); }
+
+/* 비밀번호 조건: 충족 시 채운 원 + 취소선 */
+.rules { list-style: none; margin: 8px 0 0 2px; padding: 0; display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+.rules li { display: flex; align-items: center; gap: 8px; }
+.rules li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--muted); flex: none; }
+.rules li.on { text-decoration: line-through; color: var(--label); }
+.rules li.on::before { background: var(--text-2); border-color: var(--text-2); }
+
+/* ===== 해시태그 ===== */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips:empty { display: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: 19px;
+  padding: 6px 12px; font-size: 12px; line-height: 15px;
+  color: var(--hashtag); background: var(--paper); font-family: var(--font-body);
+}
+.chip-btn { cursor: pointer; }
+.chip-btn:hover { border-color: var(--hashtag); }
+.chip-x { width: 14px; height: 14px; border-radius: 50%; border: 0; background: var(--chip-x); color: var(--text-2); font-size: 10px; line-height: 14px; padding: 0; cursor: pointer; }
+.chip-sm { padding: 2px 8px; font-size: 11px; line-height: 14px; }
+
+/* ===== 로그인 ===== */
+.login { display: grid; grid-template-columns: 320px 1fr; min-height: 420px; }
+.login-left { border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; padding: 40px 36px; }
+.brand-eyebrow { font-size: 12px; font-weight: 700; color: var(--accent); }
+.brand { font-family: var(--font-hand); font-weight: 700; font-size: 46px; line-height: 58px; margin: 4px 0 10px; }
+.brand-sub { font-size: 14px; color: var(--sub); }
+.login-right { padding: 64px 48px 36px; }
+.login-right h1 { font-family: var(--font-hand); font-weight: 700; font-size: 36px; line-height: 45px; margin-bottom: 24px; }
+.login-right .field { margin-bottom: 20px; }
+.login-links { text-align: center; font-size: 12px; color: var(--muted); margin-top: 14px; display: flex; justify-content: center; gap: 8px; }
+.demo {
+  width: 290px; margin: -8px auto 40px;
+  background: var(--postit-blue); color: var(--postit-text);
+  padding: 16px 18px; font-size: 12px; line-height: 1.8;
+  box-shadow: 2px 2px 10px rgba(119, 119, 119, 0.25);
+  transform: rotate(-1.2deg);
+}
+.demo-title { font-family: var(--font-hand); font-weight: 700; font-size: 22px; line-height: 28px; margin-bottom: 4px; }
+.demo b { font-weight: 700; }
+@media (max-width: 760px) {
+  .login { grid-template-columns: 1fr; }
+  .login-left { border-right: 0; border-bottom: 1px solid var(--line); padding: 32px 22px 22px; }
+  .login-right { padding: 24px 22px 32px; }
+  .demo { margin: 24px auto 40px; }
+}
+
+/* 회원가입 / 비밀번호 변경 폼 폭 */
+.form-344 { width: 100%; max-width: 360px; margin: 40px auto 0; }
+.form-240 { width: 100%; max-width: 280px; margin: 40px auto 0; }
+.id-row { display: flex; align-items: flex-end; gap: 8px; }
+.id-row .box { min-width: 0; }
+.id-row .at { font-family: var(--font-hand); font-size: 22px; font-weight: 700; line-height: 1; padding-bottom: 8px; }
+.submit-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.submit-row .btn { flex: 1 1 200px; }
+.submit-row .msg { margin: 0; }
+.foot-link { text-align: center; font-size: 12px; color: var(--muted); margin-top: 14px; }
+.center-actions { display: flex; justify-content: center; gap: 10px; margin-top: 36px; flex-wrap: wrap; }
+.center-msg { text-align: center; }
+
+/* ===== 메인 ===== */
+.main-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin: 40px 0 32px; flex-wrap: wrap; }
+.main-head h1 { font-family: var(--font-hand); font-weight: 700; font-size: 36px; line-height: 45px; }
+.main-head h1 .num, .post-head h1 .num { font-size: 0.7em; font-weight: 500; margin-right: 4px; }
+.search { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.search .s-q { flex: 1 1 180px; }
+.search select, .search input[type="date"] { width: auto; }
+.list-wrap { overflow-x: auto; }
+.list { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--paper); border: 1px solid var(--line-soft); border-radius: 6px; overflow: hidden; }
+.list th { background: var(--head); font-weight: 400; font-size: 11px; color: var(--label); text-align: left; padding: 12px 14px; white-space: nowrap; }
+.list td { border-top: 1px solid var(--line-soft); padding: 12px 14px; font-size: 13px; color: var(--text-2); font-weight: 400; vertical-align: middle; }
+.list tbody tr { cursor: pointer; }
+.list tbody tr:hover td { background: var(--row-hover); }
+.list .c-no { width: 64px; }
+.list td.c-no { color: var(--btn); }
+.list .c-title a { text-decoration: none; }
+.list .c-title a:hover { text-decoration: underline; }
+.list .c-title .chips { margin-top: 5px; gap: 4px; }
+.list .c-nick { width: 110px; white-space: nowrap; }
+.list .c-time { width: 84px; white-space: nowrap; }
+.list td.c-time { color: var(--label); }
+.list .empty td { text-align: center; padding: 32px 14px; cursor: default; color: var(--muted); }
+@media (max-width: 560px) { .list .c-no { display: none; } }
+
+/* ===== 게시글 ===== */
+.post { max-width: 580px; margin: 32px auto 0; }
+.post-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.post-head h1 { font-family: var(--font-hand); font-weight: 700; font-size: 28px; line-height: 35px; }
+.post-meta { font-size: 12px; color: var(--muted); }
+.post-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.content-box { min-height: 72px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 3px; font-size: 16px; line-height: 1.8; color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+.content-box.empty { color: var(--muted); font-size: 14px; }
+.urls { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.urls a { font-size: 14px; color: var(--hashtag); word-break: break-all; }
+.urls.edit { margin-top: 10px; }
+.urls.edit li { display: flex; align-items: center; gap: 12px; }
+.field .chips { margin-top: 10px; }
+.post-foot { display: flex; justify-content: center; margin-top: 40px; }
+.post-foot .btn { min-width: 110px; }
+
+/* ===== 마이페이지 ===== */
+.my { max-width: 400px; margin: 40px auto 0; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+.my h1 { font-family: var(--font-hand); font-weight: 700; font-size: 28px; line-height: 35px; align-self: stretch; margin-bottom: 6px; }
+.my .field { margin: 0; align-self: stretch; }
+.my .readonly { width: 260px; max-width: 100%; }
+.nick-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.nick-row .readonly, .nick-row .box { width: 160px; }
+.my .stack-btn { min-width: 132px; }
+
+/* ===== ABOUT (포스트잇 · 기본) ===== */
+.about {
+  max-width: 400px; margin: 48px auto 0; padding: 36px 28px 40px;
+  background: var(--postit-yellow); color: var(--postit-text);
+  box-shadow: 2px 2px 10px rgba(119, 119, 119, 0.25);
+  transform: rotate(-0.8deg); text-align: center;
+}
+.about h1 { font-family: var(--font-hand); font-weight: 700; font-size: 28px; line-height: 35px; margin-bottom: 14px; }
+.about p { font-size: 16px; line-height: 1.8; }
+
+/* ===== 에러 ===== */
+.err-panel { margin: 48px 0 0; background: var(--head); border: 1px solid var(--line-soft); border-radius: 3px; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px; padding: 40px 20px; text-align: center; }
+.err-panel p { font-family: var(--font-hand); font-weight: 700; font-size: 28px; line-height: 35px; }
+.err-card { width: 300px; max-width: 100%; margin: 96px auto 0; background: var(--modal); border: 1px solid var(--line); border-radius: 4px; padding: 32px 26px 24px; text-align: center; font-size: 16px; box-shadow: 0 1px 2px rgba(38, 31, 26, 0.08); }
+.err-card .btn { margin-top: 24px; min-width: 110px; }
+
+/* ===== 팝업 ===== */
+.overlay { position: fixed; inset: 0; background: var(--overlay); display: grid; place-items: center; padding: 20px; z-index: 50; }
+.modal { width: 300px; max-width: 100%; background: var(--modal); border-radius: 4px; padding: 26px 24px 22px; font-size: 14px; line-height: 1.5; color: var(--text-2); box-shadow: 0 2px 6px rgba(43, 33, 23, 0.2); animation: pop 140ms ease-out; }
+.modal-sub { font-size: 12px; color: var(--label); margin-top: 4px; }
+.modal-actions { display: flex; flex-direction: row-reverse; gap: 10px; margin-top: 20px; }
+.modal-actions .btn { flex: 1; }
+.modal-input { display: flex; align-items: flex-end; gap: 12px; margin-top: 16px; }
+.modal-input .box { flex: 1; }
+.modal .msg.soft { color: var(--accent); }
+@keyframes pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .modal { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+
+<script>
+/* ===== 유틸 ===== */
+const pad = n => String(n).padStart(2, '0');
+const fmtDate = d => `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`;
+const fmtTime = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const sameDay = (a, b) => fmtDate(a) === fmtDate(b);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+const go = path => { location.hash = '#' + path; };
+function setMsg(el, text, kind) { el.textContent = text; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+/* ===== 목업 데이터 (새로고침하면 초기화) ===== */
+const now = new Date();
+const minsAgo = m => new Date(now.getTime() - m * 60000);
+const daysAgo = (d, h, m) => { const t = new Date(now); t.setDate(t.getDate() - d); t.setHours(h, m, 0, 0); return t; };
+
+const db = {
+  users: [
+    { email: 'test@gmail.com', pw: 'test1234!', name: '김일일', nickname: '쇠똥구리', status: 'active', mustChange: false },
+    { email: 'temp@gmail.com', pw: 'temp1234', name: '이임시', nickname: '뷰정복러', status: 'active', mustChange: true },
+    { email: 'bye@gmail.com', pw: 'bye12345', name: '박탈퇴', nickname: '잠깐쉬는중', status: 'withdrawn', mustChange: false },
+    { email: 'fairy@naver.com', pw: 'fairy1234', name: '최로그', nickname: '로그요정', status: 'active', mustChange: false }
+  ],
+  posts: [
+    { id: 1, author: 'fairy@naver.com', title: 'JPA N+1 문제 정리', content: '연관관계를 LAZY로 두고 목록을 조회하면 연관 엔티티마다 쿼리가 한 번씩 더 나간다.\nfetch join과 @EntityGraph를 비교해봤다.', urls: ['https://velog.io/'], tags: ['JPA', '오늘의로그'], createdAt: daysAgo(3, 21, 40), updatedAt: null },
+    { id: 2, author: 'test@gmail.com', title: '인덱스와 카디널리티', content: '카디널리티가 낮은 컬럼에 인덱스를 걸면 옵티마이저가 풀스캔을 고른다.', urls: [], tags: ['DB'], createdAt: daysAgo(2, 23, 5), updatedAt: null },
+    { id: 3, author: 'temp@gmail.com', title: '이번 주 배운 것', content: '', urls: [], tags: ['회고'], createdAt: daysAgo(1, 22, 10), updatedAt: null },
+    { id: 4, author: 'test@gmail.com', title: 'vue 3', content: '상태 관리, 컴포넌트, pinia', urls: ['https://www.tistory.com/', 'https://velog.io/'], tags: ['오늘의로그', '쇠똥구리팀', '뷰_정복기'], createdAt: minsAgo(190), updatedAt: minsAgo(40) },
+    { id: 5, author: 'fairy@naver.com', title: '오늘의 회고', content: '트랜잭션 전파 속성 REQUIRED와 REQUIRES_NEW 차이를 테스트 코드로 확인했다.', urls: [], tags: ['오늘의로그'], createdAt: minsAgo(35), updatedAt: null }
+  ],
+  seq: 6
+};
+
+const state = { session: null, pwVerified: false, filter: { q: '', field: 'all', date: '' } };
+const me = () => db.users.find(u => u.email === state.session) || null;
+const userOf = email => db.users.find(u => u.email === email);
+const nickOf = email => (userOf(email) ? userOf(email).nickname : '알 수 없음');
+const findPost = id => db.posts.find(p => p.id === Number(id));
+
+/* ===== 공통 조각 ===== */
+const chip = (t, mode) => {
+  if (mode === 'remove') return `<span class="chip"># ${esc(t)}<button type="button" class="chip-x" data-remove-tag="${esc(t)}" aria-label="${esc(t)} 태그 삭제">x</button></span>`;
+  if (mode === 'filter') return `<button type="button" class="chip chip-btn" data-tag="${esc(t)}"># ${esc(t)}</button>`;
+  if (mode === 'small') return `<button type="button" class="chip chip-sm chip-btn" data-tag="${esc(t)}"># ${esc(t)}</button>`;
+  return `<span class="chip"># ${esc(t)}</span>`;
+};
+
+const rulesHtml = id =>
+  `<ul class="rules" id="${id}"><li data-rule="mix">영문 + 숫자 조합</li><li data-rule="special">특수문자 가능</li><li data-rule="len">8자 이상</li></ul>`;
+const checkPw = pw => ({ mix: /[A-Za-z]/.test(pw) && /\d/.test(pw), special: /[^A-Za-z0-9]/.test(pw), len: pw.length >= 8 });
+const pwOk = pw => { const r = checkPw(pw); return r.mix && r.len; };
+function bindRules(input, ul) {
+  const up = () => {
+    const r = checkPw(input.value);
+    ['mix', 'special', 'len'].forEach(k => ul.querySelector(`[data-rule="${k}"]`).classList.toggle('on', r[k]));
+  };
+  input.addEventListener('input', up);
+  up();
+}
+function bindMatch(a, b, msg) {
+  const up = () => {
+    if (!b.value) return setMsg(msg, '');
+    if (a.value === b.value) setMsg(msg, '비밀번호가 일치합니다', 'ok');
+    else setMsg(msg, '* 비밀번호가 일치하지 않습니다', 'err');
+  };
+  a.addEventListener('input', up);
+  b.addEventListener('input', up);
+}
+
+/* ===== 팝업 ===== */
+let lastFocus = null;
+function openModal({ message, sub = '', input = null, actions, dismissible = true }) {
+  const root = $('#modal-root');
+  if (!root.innerHTML) lastFocus = document.activeElement;
+  const btn = (a, i) => `<button type="button" class="btn ${a.danger || actions.length === 1 ? 'btn-primary' : ''}" data-i="${i}">${esc(a.label)}</button>`;
+  root.innerHTML = `
+    <div class="overlay">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+        <p id="m-title">${esc(message)}</p>
+        ${sub ? `<p class="modal-sub">${sub}</p>` : ''}
+        ${input ? `
+          <div class="modal-input">
+            <input class="box" id="m-input" type="${input.type || 'text'}" placeholder="${esc(input.placeholder || '')}" aria-label="${esc(input.label || message)}">
+            ${actions.map(btn).join('')}
+          </div>
+          <p class="msg soft" id="m-err" role="alert"></p>` : `
+          <p class="msg err" id="m-err" role="alert"></p>
+          <div class="modal-actions">${actions.map(btn).join('')}</div>`}
+      </div>
+    </div>`;
+  const api = {
+    close: closeModal,
+    error: t => { const e = $('#m-err'); e.textContent = t; },
+    value: () => ($('#m-input') ? $('#m-input').value.trim() : '')
+  };
+  root.querySelectorAll('[data-i]').forEach(b => {
+    b.addEventListener('click', () => {
+      const a = actions[b.dataset.i];
+      if (a.onClick) a.onClick(api); else closeModal();
+    });
+  });
+  const inp = $('#m-input');
+  if (inp) {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); root.querySelector('[data-i="0"]').click(); }
+    });
+    inp.focus();
+  } else {
+    root.querySelector('[data-i="0"]').focus();
+  }
+  root.onkeydown = e => { if (e.key === 'Escape' && dismissible) closeModal(); };
+  $('.overlay', root).addEventListener('click', e => { if (e.target.classList.contains('overlay') && dismissible) closeModal(); });
+}
+function closeModal() {
+  $('#modal-root').innerHTML = '';
+  if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+}
+
+/* ===== 셸 ===== */
+function renderShell(route) {
+  const u = me();
+  const tab = (key, label, href) => `<a class="tab" href="${href}" ${route && route.tab === key ? 'aria-current="page"' : ''}>${label}</a>`;
+  const header = u && route && !route.bare ? `
+    <header class="top">
+      <a class="logo-box" href="#/main" aria-label="iLog 메인">iLog</a>
+      <nav class="tabs" aria-label="주요 메뉴">${tab('home', 'HOME', '#/main')}${tab('about', 'ABOUT', '#/about')}${tab('my', '마이페이지', '#/mypage')}</nav>
+      <button type="button" class="btn btn-xs logout" id="logout">로그아웃</button>
+    </header>` : '';
+  $('#app').innerHTML = `<div class="page ${route && route.flush ? 'flush' : ''}">${header}<main id="view"></main></div><div id="below"></div>`;
+  const lo = $('#logout');
+  if (lo) lo.addEventListener('click', logout);
+}
+const setView = html => { $('#view').innerHTML = html; window.scrollTo(0, 0); };
+function logout() { state.session = null; state.pwVerified = false; go('/login'); }
+
+/* ===== 로그인 ===== */
+function viewLogin() {
+  setView(`
+    <div class="login">
+      <div class="login-left">
+        <p class="brand-eyebrow">1일 1LOG</p>
+        <p class="brand">iLog</p>
+        <p class="brand-sub">매일 한 개의 로그를 남기는 학습 게시판</p>
+      </div>
+      <form class="login-right" id="lf" novalidate>
+        <h1>Login</h1>
+        <div class="field"><label class="label" for="lg-id">아이디</label><input id="lg-id" class="box" type="email" autocomplete="username"></div>
+        <div class="field"><label class="label" for="lg-pw">비밀번호</label><input id="lg-pw" class="box" type="password" autocomplete="current-password"></div>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-top:40px">로그인</button>
+        <p class="msg err" id="lg-msg" role="alert"></p>
+        <p class="login-links"><button type="button" class="btn-plain" id="find-pw">비밀번호 찾기</button><span aria-hidden="true">|</span><a href="#/signup">회원 가입</a></p>
+      </form>
+    </div>`);
+  $('#below').innerHTML = `
+    <div class="demo">
+      <p class="demo-title">데모 계정</p>
+      <p><b>일반</b> <span class="num">test@gmail.com / test1234!</span></p>
+      <p><b>임시 비밀번호</b> <span class="num">temp@gmail.com / temp1234</span></p>
+      <p><b>탈퇴</b> <span class="num">bye@gmail.com / bye12345</span></p>
+    </div>`;
+
+  $('#lf').addEventListener('submit', e => {
+    e.preventDefault();
+    const id = $('#lg-id').value.trim();
+    const pw = $('#lg-pw').value;
+    const msg = $('#lg-msg');
+    if (!id) return setMsg(msg, '아이디를 입력해주세요!', 'err');
+    if (!pw) return setMsg(msg, '비밀번호를 입력해주세요!', 'err');
+    const u = userOf(id);
+    if (!u || u.pw !== pw) return setMsg(msg, '아이디 또는 비밀번호가 일치하지 않습니다. 입력한 정보를 다시 확인해주세요', 'err');
+    if (u.status === 'withdrawn') {
+      return openModal({
+        message: '탈퇴 이력이 있는 계정입니다. 복구하시겠습니까?',
+        actions: [
+          { label: '복구하기', danger: true, onClick: m => { u.status = 'active'; m.close(); loginAs(u); } },
+          { label: '취소' }
+        ]
+      });
+    }
+    loginAs(u);
+  });
+
+  $('#find-pw').addEventListener('click', () => {
+    openModal({
+      message: '가입한 이메일을 입력해 주세요.',
+      input: { type: 'email', label: '가입한 이메일' },
+      actions: [{ label: '확인', onClick: m => {
+        const u = userOf(m.value());
+        if (!u || u.status !== 'active') return m.error('가입되지 않은 이메일입니다.');
+        u.pw = 'temp0000';
+        u.mustChange = true;
+        openModal({
+          message: '임시 비밀번호가 발급되었습니다.',
+          sub: '실제 서비스에서는 이메일로 발송됩니다.<br>데모 임시 비밀번호: temp0000',
+          actions: [{ label: '확인' }]
+        });
+      } }]
+    });
+  });
+}
+function loginAs(u) {
+  state.session = u.email;
+  go(u.mustChange ? '/force-password' : '/main');
+}
+
+/* ===== 회원가입 ===== */
+function viewSignup() {
+  setView(`
+    <div class="auth-top"><h1>회원가입</h1></div>
+    <form id="sf" class="form-344" novalidate>
+      <div class="field">
+        <label class="label" for="su-local">아이디</label>
+        <div class="id-row">
+          <input id="su-local" class="box" style="flex:0 1 100px" autocomplete="off" aria-label="이메일 아이디">
+          <span class="at" aria-hidden="true">@</span>
+          <select id="su-domain" class="box" style="flex:0 1 130px" aria-label="이메일 도메인">
+            <option value="gmail.com">gmail.com</option>
+            <option value="naver.com">naver.com</option>
+            <option value="daum.net">daum.net</option>
+            <option value="custom">직접 입력</option>
+          </select>
+          <button type="button" class="btn btn-sm" id="su-id-check">중복 확인</button>
+        </div>
+        <input id="su-custom" class="box" placeholder="도메인 입력" aria-label="도메인 직접 입력" hidden style="margin-top:6px">
+        <p class="msg" id="su-id-msg" role="alert"></p>
+      </div>
+      <div class="field">
+        <label class="label" for="su-pw">비밀번호</label>
+        <input id="su-pw" class="box" type="password" autocomplete="new-password">
+        ${rulesHtml('su-rules')}
+      </div>
+      <div class="field">
+        <label class="label" for="su-pw2">비밀번호 확인</label>
+        <input id="su-pw2" class="box" type="password" autocomplete="new-password">
+        <p class="msg" id="su-pw2-msg"></p>
+      </div>
+      <div class="field">
+        <label class="label" for="su-name">이름</label>
+        <input id="su-name" class="box" autocomplete="name" maxlength="50">
+        <p class="msg hint">실명을 입력해주세요. (필수)</p>
+      </div>
+      <div class="field">
+        <label class="label" for="su-nick">닉네임</label>
+        <div class="row">
+          <input id="su-nick" class="box" maxlength="20">
+          <button type="button" class="btn btn-sm" id="su-nick-check">중복 확인</button>
+        </div>
+        <p class="msg" id="su-nick-msg" role="alert"></p>
+      </div>
+      <div class="submit-row" style="margin-top:40px">
+        <button type="submit" class="btn btn-primary">가입하기</button>
+        <p class="msg err" id="su-msg" role="alert"></p>
+      </div>
+      <p class="foot-link">이미 계정이 있으신가요? <a href="#/login">로그인</a></p>
+    </form>`);
+
+  let idChecked = null;
+  let nickChecked = null;
+  const local = $('#su-local'), domain = $('#su-domain'), custom = $('#su-custom');
+  const emailValue = () => local.value.trim() + '@' + (domain.value === 'custom' ? custom.value.trim() : domain.value);
+  const emailValid = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue());
+  const resetId = () => { idChecked = null; setMsg($('#su-id-msg'), ''); };
+  local.addEventListener('input', resetId);
+  custom.addEventListener('input', resetId);
+  domain.addEventListener('change', () => { custom.hidden = domain.value !== 'custom'; resetId(); });
+
+  $('#su-id-check').addEventListener('click', () => {
+    const m = $('#su-id-msg');
+    if (!emailValid()) return setMsg(m, '이메일 형식을 확인해주세요.', 'err');
+    if (userOf(emailValue())) return setMsg(m, '이미 존재하는 계정입니다. 로그인 페이지에서 로그인해주세요.', 'err');
+    idChecked = emailValue();
+    setMsg(m, '사용 가능한 아이디 입니다!', 'ok');
+  });
+
+  const nick = $('#su-nick');
+  nick.addEventListener('input', () => { nickChecked = null; setMsg($('#su-nick-msg'), ''); });
+  $('#su-nick-check').addEventListener('click', () => {
+    const m = $('#su-nick-msg');
+    const v = nick.value.trim();
+    if (!v) return setMsg(m, '닉네임을 입력해주세요.', 'err');
+    if (db.users.some(u => u.nickname === v)) return setMsg(m, '이미 사용 중인 닉네임입니다', 'err');
+    nickChecked = v;
+    setMsg(m, '사용 가능한 닉네임입니다!', 'ok');
+  });
+
+  const pw = $('#su-pw'), pw2 = $('#su-pw2');
+  bindRules(pw, $('#su-rules'));
+  bindMatch(pw, pw2, $('#su-pw2-msg'));
+
+  $('#sf').addEventListener('submit', e => {
+    e.preventDefault();
+    const msg = $('#su-msg');
+    const name = $('#su-name').value.trim();
+    const n = nick.value.trim();
+    if (!local.value.trim() || !pw.value || !pw2.value || !name || !n || (domain.value === 'custom' && !custom.value.trim())) return setMsg(msg, '* 미입력 값이 있습니다.', 'err');
+    if (idChecked !== emailValue()) return setMsg(msg, '* 아이디 중복 확인을 해주세요.', 'err');
+    if (!pwOk(pw.value)) return setMsg(msg, '* 비밀번호 조건을 확인해주세요.', 'err');
+    if (pw.value !== pw2.value) return setMsg(msg, '* 비밀번호가 일치하지 않습니다', 'err');
+    if (nickChecked !== n) return setMsg(msg, '* 닉네임 중복 확인을 해주세요.', 'err');
+    setMsg(msg, '');
+    db.users.push({ email: idChecked, pw: pw.value, name, nickname: n, status: 'active', mustChange: false });
+    openModal({
+      message: '회원가입이 완료되었습니다.',
+      dismissible: false,
+      actions: [{ label: '확인', onClick: m => { m.close(); go('/login'); } }]
+    });
+  });
+}
+
+/* ===== 비밀번호 변경 (F-1 강제 변경 / 마이페이지에서 변경) ===== */
+function viewPwForm(mode) {
+  const u = me();
+  if (mode === 'change' && !state.pwVerified) { go('/mypage'); return; }
+  setView(`
+    <div class="auth-top" ${mode === 'change' ? 'style="border:0;padding-top:30px"' : ''}><h1>비밀번호 변경</h1></div>
+    <form id="pwf" class="form-240" novalidate>
+      <div class="field">
+        <label class="label-lg" for="np1">새로운 비밀번호를 입력해주세요</label>
+        <input id="np1" class="box" type="password" autocomplete="new-password">
+        ${rulesHtml('np-rules')}
+      </div>
+      <div class="field">
+        <label class="label-lg" for="np2">다시 한 번 입력해주세요</label>
+        <input id="np2" class="box" type="password" autocomplete="new-password">
+        <p class="msg" id="np2-msg"></p>
+      </div>
+      <div class="center-actions">
+        <button class="btn btn-primary" type="submit">비밀번호 변경하기</button>
+        <button class="btn" type="button" id="pwf-cancel">취소</button>
+      </div>
+      <p class="msg err center-msg" id="pwf-msg" role="alert"></p>
+    </form>`);
+
+  const a = $('#np1'), b = $('#np2');
+  bindRules(a, $('#np-rules'));
+  bindMatch(a, b, $('#np2-msg'));
+  $('#pwf-cancel').addEventListener('click', () => {
+    if (mode === 'force') logout(); else { state.pwVerified = false; go('/mypage'); }
+  });
+
+  const apply = () => { u.pw = a.value; u.mustChange = false; state.pwVerified = false; };
+  const done = () => openModal({
+    message: '비밀번호가 성공적으로 변경되었습니다',
+    dismissible: false,
+    actions: [{ label: '확인', onClick: m => { m.close(); go(mode === 'force' ? '/main' : '/mypage'); } }]
+  });
+
+  $('#pwf').addEventListener('submit', e => {
+    e.preventDefault();
+    const msg = $('#pwf-msg');
+    if (!a.value || !b.value) return setMsg(msg, '* 미입력 값이 있습니다.', 'err');
+    if (!pwOk(a.value)) return setMsg(msg, '* 비밀번호 조건을 확인해주세요.', 'err');
+    if (a.value !== b.value) return setMsg(msg, '* 비밀번호가 일치하지 않습니다', 'err');
+    if (a.value === u.pw) return setMsg(msg, '* 현재 비밀번호와 다른 비밀번호를 입력해주세요.', 'err');
+    setMsg(msg, '');
+    if (mode === 'force') { apply(); done(); return; }
+    openModal({
+      message: '비밀번호를 변경하시겠습니까?',
+      actions: [
+        { label: '변경하기', danger: true, onClick: () => { apply(); done(); } },
+        { label: '취소' }
+      ]
+    });
+  });
+}
+
+/* ===== 메인 ===== */
+function filterPosts({ q, field, date }) {
+  let k = q.trim().toLowerCase();
+  if (field === 'tag') k = k.replace(/^#+/, '');
+  return db.posts
+    .filter(p => {
+      if (date && fmtDate(p.createdAt) !== date.replaceAll('-', '.')) return false;
+      if (!k) return true;
+      const t = p.title.toLowerCase(), c = p.content.toLowerCase();
+      if (field === 'title') return t.includes(k);
+      if (field === 'content') return c.includes(k);
+      if (field === 'tag') return p.tags.some(tag => tag.toLowerCase().includes(k));
+      return t.includes(k) || c.includes(k);
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function viewMain() {
+  const f = state.filter;
+  const list = filterPosts(f);
+  const filtered = !!(f.q || f.date);
+  const rows = list.length ? list.map(p => `
+    <tr data-id="${p.id}">
+      <td class="c-no num">${p.id}</td>
+      <td class="c-title"><a href="#/post/${p.id}">${esc(p.title)}</a><div class="chips">${p.tags.map(t => chip(t, 'small')).join('')}</div></td>
+      <td class="c-nick">${esc(nickOf(p.author))}</td>
+      <td class="c-time num">${sameDay(p.createdAt, now) ? fmtTime(p.createdAt) : fmtDate(p.createdAt).slice(5)}</td>
+    </tr>`).join('') : `<tr class="empty"><td colspan="4">${filtered ? '조건에 맞는 기록이 없습니다.' : '아직 작성된 기록이 없습니다.'}</td></tr>`;
+
+  setView(`
+    <div class="main-head">
+      <h1><span class="num">${fmtDate(now)}</span> 오늘의 기록</h1>
+      <a class="btn btn-primary" href="#/write">+ 글쓰기</a>
+    </div>
+    <form class="search" id="search" role="search">
+      <label class="sr-only" for="s-q">검색어</label>
+      <input id="s-q" class="box s-q" placeholder="검색어 입력" value="${esc(f.q)}">
+      <select id="s-field" class="box" aria-label="검색 범위">
+        <option value="all">내용+제목</option>
+        <option value="title">제목</option>
+        <option value="content">내용</option>
+        <option value="tag">해시태그</option>
+      </select>
+      <input id="s-date" class="box" type="date" aria-label="날짜 선택" value="${esc(f.date)}">
+      <button class="btn btn-primary" type="submit" aria-label="검색">🔍</button>
+      ${filtered ? '<button class="btn" type="button" id="s-reset">초기화</button>' : ''}
+    </form>
+    <div class="list-wrap">
+      <table class="list">
+        <thead><tr><th class="c-no">인덱스</th><th>제목</th><th class="c-nick">닉네임</th><th class="c-time">작성 시간</th></tr></thead>
+        <tbody id="rows">${rows}</tbody>
+      </table>
+    </div>`);
+
+  $('#s-field').value = f.field;
+  $('#search').addEventListener('submit', e => {
+    e.preventDefault();
+    state.filter = { q: $('#s-q').value, field: $('#s-field').value, date: $('#s-date').value };
+    viewMain();
+  });
+  const reset = $('#s-reset');
+  if (reset) reset.addEventListener('click', () => { state.filter = { q: '', field: 'all', date: '' }; viewMain(); });
+  $('#rows').addEventListener('click', e => {
+    const tag = e.target.closest('[data-tag]');
+    if (tag) { state.filter = { q: tag.dataset.tag, field: 'tag', date: '' }; viewMain(); return; }
+    if (e.target.closest('a')) return;
+    const tr = e.target.closest('tr[data-id]');
+    if (tr) go('/post/' + tr.dataset.id);
+  });
+}
+
+/* ===== 글 작성 / 수정 ===== */
+function viewPostForm(mode, post) {
+  const base = mode === 'edit' ? post.createdAt : now;
+  const draft = { urls: mode === 'edit' ? [...post.urls] : [], tags: mode === 'edit' ? [...post.tags] : [] };
+
+  setView(`
+    <form id="pf" class="post" novalidate>
+      <div class="post-head">
+        <h1><span class="num">${fmtDate(base)}</span> 의 기록</h1>
+        ${mode === 'edit' ? `<div class="btn-group"><button class="btn btn-primary" type="submit">수정 완료</button><button class="btn" type="button" id="pf-cancel">취소</button></div>` : ''}
+      </div>
+      <div class="field">
+        <div class="label-row"><label class="label-lg" for="pf-title">제목</label><span class="msg err" id="pf-title-msg" role="alert"></span></div>
+        <input id="pf-title" class="box" maxlength="100" value="${mode === 'edit' ? esc(post.title) : ''}">
+      </div>
+      <div class="field">
+        <label class="label-lg" for="pf-content">내용</label>
+        <textarea id="pf-content" class="box" rows="4">${mode === 'edit' ? esc(post.content) : ''}</textarea>
+      </div>
+      <div class="field">
+        <label class="label-lg" for="pf-url">URL (하이퍼링크)</label>
+        <div class="row">
+          <input id="pf-url" class="box" inputmode="url" style="flex:0 1 470px">
+          <button type="button" class="btn" id="pf-url-add">추가</button>
+        </div>
+        <p class="msg" id="pf-url-msg" role="alert"></p>
+        <ul class="urls edit" id="pf-urls"></ul>
+      </div>
+      <div class="field">
+        <div class="label-row"><label class="label-lg" for="pf-tag">#해시태그</label><span class="helper">공부 주제, 스터디 이름 등을 입력해보세요</span></div>
+        <div class="row">
+          <input id="pf-tag" class="box" maxlength="50" style="flex:0 1 470px">
+          <button type="button" class="btn" id="pf-tag-add">추가</button>
+        </div>
+        <p class="msg" id="pf-tag-msg" role="alert"></p>
+        <div class="chips" id="pf-tags"></div>
+      </div>
+      ${mode === 'write' ? '<div class="post-foot"><button class="btn btn-primary" type="submit">글 게시하기</button></div>' : ''}
+    </form>`);
+
+  const renderUrls = () => {
+    $('#pf-urls').innerHTML = draft.urls.map((u, i) => `
+      <li><a class="url" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>
+      <button type="button" class="btn btn-sm" data-remove-url="${i}">삭제</button></li>`).join('');
+  };
+  const renderTags = () => { $('#pf-tags').innerHTML = draft.tags.map(t => chip(t, 'remove')).join(''); };
+  renderUrls();
+  renderTags();
+
+  const addUrl = () => {
+    const input = $('#pf-url'), msg = $('#pf-url-msg');
+    let v = input.value.trim();
+    if (!v) return;
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+    try { new URL(v); } catch { return setMsg(msg, '* 올바른 URL 형식이 아닙니다.', 'err'); }
+    if (draft.urls.includes(v)) return setMsg(msg, '* 중복된 값입니다.', 'err');
+    draft.urls.push(v);
+    input.value = '';
+    setMsg(msg, '');
+    renderUrls();
+  };
+  const addTag = () => {
+    const input = $('#pf-tag'), msg = $('#pf-tag-msg');
+    const v = input.value.trim().replace(/^#+/, '').replace(/\s+/g, '_');
+    if (!v) return;
+    if (draft.tags.some(t => t.toLowerCase() === v.toLowerCase())) return setMsg(msg, '* 중복된 값입니다.', 'err');
+    draft.tags.push(v);
+    input.value = '';
+    setMsg(msg, '');
+    renderTags();
+  };
+
+  $('#pf-url-add').addEventListener('click', addUrl);
+  $('#pf-tag-add').addEventListener('click', addTag);
+  $('#pf-url').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addUrl(); } });
+  $('#pf-tag').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addTag(); } });
+  $('#pf-urls').addEventListener('click', e => {
+    const b = e.target.closest('[data-remove-url]');
+    if (b) { draft.urls.splice(Number(b.dataset.removeUrl), 1); renderUrls(); }
+  });
+  $('#pf-tags').addEventListener('click', e => {
+    const b = e.target.closest('[data-remove-tag]');
+    if (b) { draft.tags = draft.tags.filter(t => t !== b.dataset.removeTag); renderTags(); }
+  });
+  $('#pf-title').addEventListener('input', () => setMsg($('#pf-title-msg'), '', 'err'));
+  const cancel = $('#pf-cancel');
+  if (cancel) cancel.addEventListener('click', () => go('/post/' + post.id));
+
+  $('#pf').addEventListener('submit', e => {
+    e.preventDefault();
+    const title = $('#pf-title').value.trim();
+    if (!title) { setMsg($('#pf-title-msg'), '* 제목을 입력해주세요', 'err'); $('#pf-title').focus(); return; }
+    const content = $('#pf-content').value.trim();
+    if (mode === 'edit') {
+      Object.assign(post, { title, content, urls: draft.urls, tags: draft.tags, updatedAt: new Date() });
+      go('/post/' + post.id);
+    } else {
+      const id = db.seq++;
+      db.posts.push({ id, author: me().email, title, content, urls: draft.urls, tags: draft.tags, createdAt: new Date(), updatedAt: null });
+      go('/post/' + id);
+    }
+  });
+}
+
+/* ===== 글 조회 ===== */
+function viewPost(id) {
+  const p = findPost(id);
+  if (!p) return viewError('404');
+  const isAuthor = p.author === me().email;
+  const shown = p.updatedAt || p.createdAt;
+
+  setView(`
+    <div class="post">
+      <div class="post-head">
+        <h1><span class="num">${fmtDate(p.createdAt)}</span> ${isAuthor ? '의 기록' : esc(nickOf(p.author)) + '의 기록'}</h1>
+        <div class="post-side">
+          <p class="post-meta">작성 일자 <span class="num">${fmtDate(shown)} ${fmtTime(shown)}</span>${p.updatedAt ? ' (업데이트 됨)' : ''}</p>
+          ${isAuthor ? `<div class="btn-group"><a class="btn" href="#/post/${p.id}/edit">수정하기</a><button type="button" class="btn" id="del">글 삭제</button></div>` : ''}
+        </div>
+      </div>
+      <div class="field"><p class="label-lg">제목</p><p class="readonly">${esc(p.title)}</p></div>
+      <div class="field"><p class="label-lg">내용</p><div class="content-box ${p.content ? '' : 'empty'}">${p.content ? esc(p.content) : '작성된 내용이 없습니다.'}</div></div>
+      <div class="field">
+        <p class="label-lg">URL (하이퍼링크)</p>
+        ${p.urls.length ? `<ul class="urls">${p.urls.map(u => `<li><a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a></li>`).join('')}</ul>` : '<p class="msg hint">등록된 URL이 없습니다.</p>'}
+      </div>
+      <div class="field">
+        <p class="label-lg">#해시태그</p>
+        ${p.tags.length ? `<div class="chips" id="post-tags">${p.tags.map(t => chip(t, 'filter')).join('')}</div>` : '<p class="msg hint">등록된 해시태그가 없습니다.</p>'}
+      </div>
+      <div class="post-foot"><a class="btn" href="#/main">이전</a></div>
+    </div>`);
+
+  const tags = $('#post-tags');
+  if (tags) tags.addEventListener('click', e => {
+    const t = e.target.closest('[data-tag]');
+    if (t) { state.filter = { q: t.dataset.tag, field: 'tag', date: '' }; go('/main'); }
+  });
+
+  const del = $('#del');
+  if (del) del.addEventListener('click', () => {
+    openModal({
+      message: '게시글을 정말로 삭제하시겠습니까?',
+      actions: [
+        { label: '글 삭제', danger: true, onClick: () => {
+          db.posts = db.posts.filter(x => x.id !== p.id);
+          openModal({
+            message: '게시글이 삭제되었습니다.',
+            dismissible: false,
+            actions: [{ label: '확인', onClick: m => { m.close(); go('/main'); } }]
+          });
+        } },
+        { label: '취소' }
+      ]
+    });
+  });
+}
+
+function viewEdit(id) {
+  const p = findPost(id);
+  if (!p) return viewError('404');
+  if (p.author !== me().email) return viewError('403');
+  viewPostForm('edit', p);
+}
+
+/* ===== 마이페이지 ===== */
+function viewMypage(editing = false) {
+  const u = me();
+  setView(`
+    <div class="my">
+      <h1>안녕하세요 ${esc(u.nickname)}님!</h1>
+      <div class="field"><p class="label-lg">ID (이메일)</p><p class="readonly">${esc(u.email)}</p></div>
+      <div class="field"><p class="label-lg">이름</p><p class="readonly" style="width:auto;min-width:111px">${esc(u.name)}</p></div>
+      <div class="field">
+        ${editing ? `
+          <label class="label-lg" for="nick-in">닉네임</label>
+          <div class="nick-row">
+            <input id="nick-in" class="box" maxlength="20" value="${esc(u.nickname)}">
+            <div class="btn-group"><button type="button" class="btn btn-primary" id="nick-save">변경하기</button><button type="button" class="btn" id="nick-cancel">취소</button></div>
+          </div>
+          <p class="msg" id="nick-msg" role="alert"></p>` : `
+          <p class="label-lg">닉네임</p>
+          <div class="nick-row">
+            <p class="readonly">${esc(u.nickname)}</p>
+            <button type="button" class="btn" id="nick-edit">변경</button>
+          </div>`}
+      </div>
+      <button type="button" class="btn stack-btn" id="pw-change">비밀번호 변경</button>
+      <button type="button" class="btn stack-btn" id="withdraw">회원 탈퇴하기</button>
+    </div>`);
+
+  if (editing) {
+    const input = $('#nick-in');
+    input.focus();
+    input.select();
+    const save = () => {
+      const v = input.value.trim();
+      const msg = $('#nick-msg');
+      if (!v) return setMsg(msg, '닉네임을 입력해주세요.', 'err');
+      if (v === u.nickname) return setMsg(msg, '같은 닉네임으로 변경할 수 없습니다', 'err');
+      if (db.users.some(x => x.nickname === v)) return setMsg(msg, '이미 사용 중인 닉네임입니다', 'err');
+      setMsg(msg, '');
+      openModal({
+        message: '닉네임을 변경하시겠습니까?',
+        sub: `변경할 닉네임: ${esc(v)}`,
+        actions: [
+          { label: '변경하기', danger: true, onClick: () => {
+            u.nickname = v;
+            openModal({
+              message: '닉네임이 성공적으로 변경되었습니다',
+              dismissible: false,
+              actions: [{ label: '확인', onClick: m => { m.close(); viewMypage(); } }]
+            });
+          } },
+          { label: '취소' }
+        ]
+      });
+    };
+    $('#nick-save').addEventListener('click', save);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } });
+    input.addEventListener('input', () => setMsg($('#nick-msg'), ''));
+    $('#nick-cancel').addEventListener('click', () => viewMypage());
+  } else {
+    $('#nick-edit').addEventListener('click', () => viewMypage(true));
+  }
+
+  $('#pw-change').addEventListener('click', () => {
+    openModal({
+      message: '현재 비밀번호를 입력해 주세요.',
+      input: { type: 'password', label: '현재 비밀번호' },
+      actions: [{ label: '확인', onClick: m => {
+        if ($('#m-input').value !== u.pw) return m.error('일치하지 않는 비밀번호입니다.');
+        state.pwVerified = true;
+        m.close();
+        go('/mypage/password');
+      } }]
+    });
+  });
+
+  $('#withdraw').addEventListener('click', () => {
+    openModal({
+      message: '정말로 계정을 삭제하시겠습니까?',
+      sub: '30일간 복구할 수 있으며, 30일 후에는 복구가 불가능합니다.',
+      actions: [
+        { label: '삭제하기', danger: true, onClick: () => {
+          u.status = 'withdrawn';
+          openModal({
+            message: '계정이 삭제되었습니다',
+            dismissible: false,
+            actions: [{ label: '확인', onClick: m => { m.close(); logout(); } }]
+          });
+        } },
+        { label: '취소' }
+      ]
+    });
+  });
+}
+
+/* ===== ABOUT ===== */
+function viewAbout() {
+  setView(`
+    <div class="about">
+      <h1>iLog 에 오신 것을 환영합니다!</h1>
+      <p>iLog는 하루에 하나씩 공부한 내용을 기록하는 게시판입니다.<br>
+      제목과 내용, 참고한 URL, 해시태그를 남기고<br>
+      날짜와 해시태그로 지난 기록을 다시 찾아볼 수 있습니다.</p>
+    </div>`);
+}
+
+/* ===== 공통 에러 ===== */
+function viewError(code) {
+  if (code === '403') {
+    setView(`
+      <div class="err-panel">
+        <p>잘못된 접근 입니다!</p>
+        <button type="button" class="btn btn-primary" id="err-go">메인 페이지로</button>
+      </div>`);
+    $('#err-go').addEventListener('click', () => go('/main'));
+    return;
+  }
+  const map = {
+    '401': { text: '로그인이 필요합니다', to: () => go('/login') },
+    '404': { text: '존재하지 않는 게시글입니다.', to: () => (history.length > 1 ? history.back() : go('/main')) },
+    'page': { text: '존재하지 않는 페이지입니다.', to: () => go(me() ? '/main' : '/login') }
+  };
+  const e = map[code];
+  setView(`
+    <div class="err-card" role="alert">
+      <p>${e.text}</p>
+      <button type="button" class="btn btn-primary" id="err-go">이전</button>
+    </div>`);
+  $('#err-go').addEventListener('click', e.to);
+}
+
+/* ===== 라우터 ===== */
+const routes = [
+  { re: /^\/login$/, view: viewLogin, pub: true, bare: true, flush: true },
+  { re: /^\/signup$/, view: viewSignup, pub: true, bare: true },
+  { re: /^\/force-password$/, view: () => viewPwForm('force'), bare: true },
+  { re: /^\/main$/, view: viewMain, tab: 'home' },
+  { re: /^\/about$/, view: viewAbout, tab: 'about' },
+  { re: /^\/write$/, view: () => viewPostForm('write'), tab: 'home' },
+  { re: /^\/post\/(\d+)$/, view: viewPost, tab: 'home' },
+  { re: /^\/post\/(\d+)\/edit$/, view: viewEdit, tab: 'home' },
+  { re: /^\/mypage$/, view: () => viewMypage(), tab: 'my' },
+  { re: /^\/mypage\/password$/, view: () => viewPwForm('change'), tab: 'my' }
+];
+
+function render() {
+  closeModal();
+  const path = location.hash.slice(1) || '/login';
+  const u = me();
+  const route = routes.find(r => r.re.test(path));
+
+  if (u && u.mustChange && path !== '/force-password') { go('/force-password'); return; }
+  if (u && route && route.pub) { go('/main'); return; }
+
+  if (!route) { renderShell(u ? { tab: null } : { bare: true }); viewError('page'); return; }
+  if (!route.pub && !u) { renderShell({ bare: true }); viewError('401'); return; }
+
+  renderShell(route);
+  route.view(...path.match(route.re).slice(1));
+}
+
+window.addEventListener('hashchange', render);
+if (!location.hash) history.replaceState(null, '', '#/login');
+render();
+</script>
+</body>
+</html>

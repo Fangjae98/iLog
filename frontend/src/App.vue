@@ -1,85 +1,31 @@
-<script setup>
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
-    </div>
-  </header>
-
-  <RouterView />
+  <div class="page" :class="{ 'page-flush': route.name === 'login' }">
+    <AppHeader v-if="showHeader" />
+    <main class="page-body">
+      <RouterView />
+    </main>
+  </div>
+  <AppDialog />
 </template>
 
-<style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
+<script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import AppHeader from '@/components/common/AppHeader.vue'
+import AppDialog from '@/components/common/AppDialog.vue'
 
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
+const route = useRoute()
+const auth = useAuthStore()
 
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
-}
-
-nav a.router-link-exact-active {
-  color: var(--color-text);
-}
-
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
-}
-
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
-}
-
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
-}
-</style>
+// 헤더를 숨기는 경우: 비로그인 화면, 로그인 안 된 상태(404 등), 강제 비밀번호 변경 화면.
+// 마이페이지에서 들어온 일반 비밀번호 변경 화면에는 헤더를 보여준다.
+//
+// 토큰 만료 판정(hasValidToken)은 여기서 하지 않는다. Date.now() 는 반응형이 아니라
+// computed 안에 넣으면 결과가 캐시된다. 만료 처리는 라우터 가드(router/index.js)가 맡는다.
+const showHeader = computed(() => {
+  if (route.meta.guestOnly || !auth.accessToken) return false
+  if (route.name === 'password-change' && auth.passwordResetRequired) return false
+  return true
+})
+</script>
