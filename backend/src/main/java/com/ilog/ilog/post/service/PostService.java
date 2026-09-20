@@ -62,6 +62,27 @@ public class PostService {
     }
 
     /**
+     * 게시글 상세 조회
+     *
+     * 클래스에 붙은 @Transactional(readOnly = true)가 그대로 적용된다.
+     * 읽기만 하므로 따로 @Transactional을 붙이지 않는다.
+     *
+     * @param postId 조회할 게시글 번호
+     * @return 게시글 정보
+     * @throws BusinessException 해당 번호의 글이 없으면 POST_NOT_FOUND(404)
+     */
+    public PostResponse getPost(Long postId) {
+        // findById는 "있을 수도, 없을 수도 있는 결과"인 Optional로 돌려준다.
+        // orElseThrow = 값이 있으면 꺼내고, 없으면 준비한 예외를 던진다.
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+
+        // urls, hashtags는 필요할 때 DB에서 읽어 오는(지연 로딩) 값이라
+        // 이 변환은 반드시 트랜잭션 안(= 이 메서드 안)에서 해야 한다.
+        return PostResponse.fromEntity(post);
+    }
+
+    /**
      * 해시태그 다듬기
      *
      * 화면(프론트)에서도 '#' 제거·중복 제거를 하지만, 서버로는 어떤 값이든 들어올 수 있으므로

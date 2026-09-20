@@ -9,6 +9,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -70,5 +72,30 @@ public class PostController {
         // ResponseEntity = 응답 상태코드 + 본문을 함께 담는 상자.
         // 새로 "만들었다"는 의미로 200(OK) 대신 201(CREATED)을 쓴다.
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * 게시글 상세 조회 API
+     *
+     *   GET /api/v1/posts/3      ← 3번 글 보기
+     *
+     * @PathVariable = 주소 안에 들어 있는 값을 꺼내는 어노테이션.
+     *   @GetMapping("/{postId}")의 {postId} 자리에 들어온 3이 파라미터 postId에 담긴다.
+     *   숫자가 아닌 값(/posts/abc)이 오면 400 에러가 난다. (global에서 처리)
+     *
+     * 성공 응답: 200 OK + 게시글 JSON
+     * 없는 글 번호면: 404 POST_NOT_FOUND (Service가 예외를 던지고 global이 응답으로 변환)
+     * 로그인 안 했으면: 401 UNAUTHORIZED
+     *
+     * 로그인한 회원만 볼 수 있다. (명세서 FN-PST-002 게시글 읽기 - 액터: 회원)
+     * @Login 파라미터를 적어 두기만 하면 로그인 검사가 되고, 로그인 정보가 없으면 401로 막힌다.
+     * 지금은 "누가 보는지"를 쓸 일이 없어서 loginMember 값을 사용하지는 않는다.
+     * (나중에 '내 글인지 표시' 같은 기능이 생기면 여기서 쓰면 된다)
+     */
+    @GetMapping("/{postId}")
+    public ResponseEntity<PostResponse> getPost(@Login LoginMember loginMember,
+                                                @PathVariable Long postId) {
+        // 조회는 "잘 가져왔다"는 뜻의 200 OK. ResponseEntity.ok(...)가 그 줄임 표현이다.
+        return ResponseEntity.ok(postService.getPost(postId));
     }
 }
