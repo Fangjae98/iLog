@@ -22,6 +22,9 @@ import lombok.Getter;
 // JPA는 내부적으로 엔티티를 다룰 때 기본 생성자가 필수입니다.
 import lombok.NoArgsConstructor;
 
+// Hibernate(JPA 구현체): 연관된 데이터를 한 번에 모아서 조회하게 해 주는 어노테이션입니다.
+import org.hibernate.annotations.BatchSize;
+
 // 여러 개의 값을 순서대로 담는 목록(List)과 그 기본 구현체(ArrayList)입니다. URL 여러 개를 담을 때 씁니다.
 import java.util.ArrayList;
 import java.util.List;
@@ -79,7 +82,10 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     // mappedBy = "post"        : 연결 정보(post_id)는 PostHashtag 쪽 post 필드가 가지고 있다는 뜻
     // cascade = ALL            : 글을 저장/삭제하면 태그도 함께 저장/삭제 ("같이 움직인다")
     // orphanRemoval = true     : 이 목록에서 빼면 DB에서도 삭제 → 글 수정 시 태그 교체에 필요 (D-06)
+    // @BatchSize : 목록 조회에서 글 5개의 태그를 가져올 때,
+    //   글마다 따로 조회(SELECT 5번)하지 않고 한 번에 모아서 조회하게 한다. (N+1 문제 방지)
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 100)
     private List<PostHashtag> hashtags = new ArrayList<>();
 
     // Setter가 없으므로 값은 이 생성자를 통해서만 넣을 수 있다.

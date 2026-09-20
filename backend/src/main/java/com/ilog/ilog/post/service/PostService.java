@@ -3,10 +3,13 @@ package com.ilog.ilog.post.service;
 import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
 import com.ilog.ilog.post.dto.PostCreateRequest;
+import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.entity.Post;
 import com.ilog.ilog.post.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +36,9 @@ public class PostService {
 
     /** 글 하나에 붙일 수 있는 해시태그 최대 개수 (D-09 확정) */
     private static final int HASHTAG_MAX_COUNT = 10;
+
+    /** 내 게시글 조회에서 한 쪽에 보여 줄 글 개수 */
+    private static final int MY_POST_PAGE_SIZE = 5;
 
     // new PostRepository() 하지 않아도 Spring이 만들어 둔 구현체를 넣어 준다.
     private final PostRepository postRepository;
@@ -80,6 +86,23 @@ public class PostService {
         // urls, hashtags는 필요할 때 DB에서 읽어 오는(지연 로딩) 값이라
         // 이 변환은 반드시 트랜잭션 안(= 이 메서드 안)에서 해야 한다.
         return PostResponse.fromEntity(post);
+    }
+
+    /**
+     * 내 게시글 조회 (명세 FN-PST-006)
+     *
+     * 최신 글이 위로 오도록 정렬해서 한 쪽에 5개씩 돌려준다.
+     *
+     * @param memberId 로그인한 회원 번호 → 이 사람이 쓴 글만 조회
+     * @param page     몇 번째 쪽인지 (0부터 시작)
+     * @return 이번 쪽의 글 목록 + 전체 개수 같은 쪽 정보
+     */
+    public PostPageResponse getMyPosts(Long memberId, int page) {
+        // PageRequest.of(쪽 번호, 개수) = "몇 번째 쪽을 몇 개씩 달라"는 주문서
+        Page<Post> myPosts = postRepository.findByMemberIdOrderByCreatedAtDesc(
+                memberId, PageRequest.of(page, MY_POST_PAGE_SIZE));
+
+        return PostPageResponse.fromPage(myPosts);
     }
 
     /**

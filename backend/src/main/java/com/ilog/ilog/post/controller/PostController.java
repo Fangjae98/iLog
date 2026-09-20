@@ -3,6 +3,7 @@ package com.ilog.ilog.post.controller;
 import com.ilog.ilog.global.auth.Login;
 import com.ilog.ilog.global.auth.LoginMember;
 import com.ilog.ilog.post.dto.PostCreateRequest;
+import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.service.PostService;
 import jakarta.validation.Valid;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /*
@@ -92,6 +94,27 @@ public class PostController {
      * 지금은 "누가 보는지"를 쓸 일이 없어서 loginMember 값을 사용하지는 않는다.
      * (나중에 '내 글인지 표시' 같은 기능이 생기면 여기서 쓰면 된다)
      */
+    /**
+     * 내 게시글 조회 API (명세 FN-PST-006)
+     *
+     *   GET /api/v1/posts?author=me          ← 첫 쪽 (최신 글 5개)
+     *   GET /api/v1/posts?author=me&page=1   ← 두 번째 쪽
+     *
+     * 주소가 목록·검색 API(A 담당)와 같은 /api/v1/posts라서, params로 구분한다.
+     *   params = "author=me"  → author=me가 붙은 요청만 이 메서드가 처리
+     *   A가 만들 일반 목록(GET /api/v1/posts)은 조건이 없으므로 서로 충돌하지 않는다.
+     *
+     * @RequestParam(defaultValue = "0") → page를 안 보내면 0쪽(첫 쪽)으로 본다
+     *
+     * 누구 글을 보여 줄지는 로그인 정보에서 정한다.
+     * (회원 번호를 요청으로 받으면 남의 글 목록을 볼 수 있게 되므로)
+     */
+    @GetMapping(params = "author=me")
+    public ResponseEntity<PostPageResponse> getMyPosts(@Login LoginMember loginMember,
+                                                       @RequestParam(defaultValue = "0") int page) {
+        return ResponseEntity.ok(postService.getMyPosts(loginMember.memberId(), page));
+    }
+
     @GetMapping("/{postId}")
     public ResponseEntity<PostResponse> getPost(@Login LoginMember loginMember,
                                                 @PathVariable Long postId) {

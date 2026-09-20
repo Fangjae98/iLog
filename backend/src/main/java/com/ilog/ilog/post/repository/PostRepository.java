@@ -1,6 +1,8 @@
 package com.ilog.ilog.post.repository;
 
 import com.ilog.ilog.post.entity.Post;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /*
@@ -24,4 +26,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
  *   앱이 실행될 때 Spring이 구현체를 대신 만들어서 Service에 넣어 준다.
  */
 public interface PostRepository extends JpaRepository<Post, Long> {
+
+    /*
+     * 내 게시글 조회에 쓰는 메서드.
+     *
+     * 메서드 이름만 규칙대로 지으면 Spring Data JPA가 SQL을 대신 만들어 준다.
+     *   findBy + MemberId              → WHERE member_id = ?
+     *   OrderBy + CreatedAt + Desc     → ORDER BY created_at DESC (최신 글이 위로)
+     *
+     * Pageable(몇 번째 쪽, 몇 개씩)을 넘기면 LIMIT / OFFSET까지 붙여서
+     * "몇 쪽짜리인지, 전체 몇 건인지"를 담은 Page로 돌려준다.
+     */
+    Page<Post> findByMemberIdOrderByCreatedAtDesc(Long memberId, Pageable pageable);
 }
