@@ -90,11 +90,22 @@ Base URL `/api/v1`. 로그인이 필요한 API는 `@Login LoginUser`로 받고, 
 | `OpenApiDocsTest` | 8 | `@WebMvcTest` + springdoc 자동 설정. `/v3/api-docs` 내용과 Swagger UI 페이지 확인 (8장) |
 | `GlobalExceptionHandlerTest` | 12 | 기존 테스트 (수정 후 통과) |
 
-**검증하지 못한 것**
+**실제 앱 + PostgreSQL 검증 (2026-09-20)**
 
-- Docker가 꺼져 있어 **실제 PostgreSQL 연동은 확인하지 못했다.** `IlogApplicationTests`(컨텍스트 로드)도 DB가 필요해 실행하지 않았다.
-- `users.name`은 NOT NULL 컬럼이다. 이미 `users` 테이블에 행이 있는 로컬 DB는 `ddl-auto=update`가 실패할 수 있다(가입 API가 없었으니 행이 있을 가능성은 낮다).
-- 유니크 제약 충돌 시 예외 변환은 Mockito로 흉내 낸 것이라, 실제 DB에서 `DataIntegrityViolationException`이 기대대로 나는지는 확인이 필요하다.
+Docker가 꺼져 있어서 brew의 PostgreSQL 17로 임시 서버(5433 포트)를 따로 띄워 검증하고, 끝난 뒤 데이터째 지웠다. 사용자의 로컬 PostgreSQL(5432)과 저장소는 건드리지 않았다.
+
+- 전체 테스트 **69개 통과**. DB가 필요한 `IlogApplicationTests`(컨텍스트 로드)도 포함.
+- 생성된 `users` 스키마: `name` NOT NULL(50), `uk_users_email`, `uk_users_nickname`.
+- 실제 HTTP로 5개 API의 성공·실패 케이스 확인. 저장 값도 확인했다: 이메일 소문자, 비밀번호 BCrypt(`$2a$10$`, 60자), `updated_at`은 가입 시 null이고 닉네임 수정 후에 채워짐, body의 이메일·이름은 무시됨.
+- 탈퇴 계정(`withdrawn_at`을 직접 넣어 시뮬레이션): 이메일 확인 `WITHDRAWN`, 같은 이메일 가입 `REJOIN_RESTRICTED`, 탈퇴 회원 닉네임은 사용 중으로 처리, 재확인·닉네임 수정은 401.
+- **동시 가입:** 12건 동시 × 10라운드(같은 이메일 5, 같은 닉네임 5). 라운드마다 201 1건 + 409 11건이고 500은 없었다. Postgres가 유니크 제약으로 실제 거절한 횟수가 110회라서, 제약 위반 → 409 변환 경로가 전부 실행됐다.
+- 경계값: 닉네임 2·10자 통과 / 11자 400, 비밀번호 8·20자 통과 / 21자 400, 이메일 100자 통과 / 101자 400, 이름 50자 통과 / 51자 400.
+- 앱 로그에 ERROR 0건, `Unhandled exception` 0건.
+
+**아직 확인하지 못한 것**
+
+- `docker compose`로 띄운 환경(PostgreSQL 16 + 컨테이너 안 백엔드). 검증은 PostgreSQL 17, 로컬 실행이었다.
+- 이미 `users` 행이 있는 DB에 `name`(NOT NULL) 컬럼이 추가되는 경우. 새 DB에서는 문제없었다. 가입 API가 없었으니 행이 있을 가능성은 낮다.
 
 ---
 
@@ -106,6 +117,8 @@ Base URL `/api/v1`. 로그인이 필요한 API는 `@Login LoginUser`로 받고, 
 | 2 | **`getActiveByEmail()` 시그니처** | A(로그인)가 기다리는 인터페이스. 예외/Optional, 탈퇴 회원 포함 여부를 몰라 만들지 않았다 |
 | 3 | `user-revise`를 `be`에 먼저 머지할지 | 위 1번 참고 |
 | 4 | DB 컬럼명 | 엔티티는 `withdrawn_at`, 명세서·테이블 명세서는 `deleted_at` |
+| 5 | **응답 시간 형식에 소수점 초가 붙는다** | 명세서 1장(🟡)은 `yyyy-MM-dd'T'HH:mm:ss`(예: `2026-09-16T10:00:00`)인데 실제 응답은 `2026-09-20T15:18:38.997289`. `createdAt`, `updatedAt`, 에러 응답의 `timestamp` 모두 해당. global 설정이라 손대지 않았다 |
+| 6 | **검증 에러 문구가 요청의 `Accept-Language`에 따라 달라진다** | `@NotBlank`·`@Email`·`@Size`의 기본 문구라서 `ko`면 "공백일 수 없습니다", `en`이면 "must not be blank"로 나온다(실제 확인). 브라우저 언어에 따라 `errors[].reason`이 바뀐다. D-17(문구 확정) 때 애노테이션에 `message`를 직접 쓰거나, `spring.web.locale-resolver=fixed` 같은 설정으로 고정하는 방법이 있다(후자는 적용 전 확인 필요) |
 
 ### 7. 일부러 하지 않은 것
 
@@ -140,8 +153,9 @@ Base URL `/api/v1`. 로그인이 필요한 API는 `@Login LoginUser`로 받고, 
 `/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/**`
 운영 배포 프로필에서는 `springdoc.api-docs.enabled=false`, `springdoc.swagger-ui.enabled=false`로 내려 외부에 노출하지 않는다.
 
-**확인하지 못한 것**
-실제 앱을 띄운 상태(DB 연결)의 Swagger UI 화면은 눈으로 확인하지 못했다. 자동 설정을 슬라이스 테스트에 직접 붙여 `/v3/api-docs`와 `/swagger-ui/index.html` 응답까지만 검증했다. 화면에서 "Try it out"으로 실제 호출하는 것은 DB를 띄운 뒤 확인이 필요하다.
+**실제 앱에서 확인한 것 (2026-09-20)**
+`/swagger-ui.html`(302 → `/swagger-ui/index.html`), `/v3/api-docs`, `/v3/api-docs/swagger-config` 모두 200. headless Chrome 캡처로 제목·설명·Authorize 버튼과 User 태그의 5개 API가 렌더링되는 것을 확인했다. 자물쇠는 `PATCH /users/me`, `POST /users/me/password-verification`에만 붙고, `LoginUser`는 파라미터나 스키마로 새지 않는다.
+아직 확인하지 못한 것은 브라우저에서 "Try it out"을 눌러 호출하는 흐름이다(같은 요청을 curl로는 검증했다).
 
 ---
 
