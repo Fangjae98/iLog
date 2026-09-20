@@ -5,6 +5,7 @@ import com.ilog.ilog.global.error.ErrorCode;
 import com.ilog.ilog.post.dto.PostCreateRequest;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
+import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.entity.Post;
 import com.ilog.ilog.post.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
@@ -103,6 +104,63 @@ public class PostService {
                 memberId, PageRequest.of(page, MY_POST_PAGE_SIZE));
 
         return PostPageResponse.fromPage(myPosts);
+    }
+
+    /**
+     * 게시글 수정 (명세 FN-PST-003)
+     *
+     * 작성자 본인만 수정할 수 있다.
+     * 받은 내용으로 제목·본문·URL·태그를 통째로 교체한다. (D-06 확정)
+     *
+     * @throws BusinessException 글이 없으면 POST_NOT_FOUND(404), 남의 글이면 POST_NOT_OWNER(403)
+     */
+    @Transactional
+    public PostResponse update(Long memberId, Long postId, PostUpdateRequest request) {
+        Post post = findMyPost(memberId, postId);
+
+        List<String> hashtags = refineHashtags(request.hashtags());
+        post.update(request.title(), request.content(), request.urls(), hashtags);
+
+        // save()를 부르지 않는 이유:
+        //   이미 DB에서 꺼내 온 엔티티라 JPA가 값 변화를 지켜보고 있다가,
+        //   바뀐 부분만 UPDATE 문으로 만들어 실행한다(변경 감지).
+        //
+        // flush()를 부르는 이유:
+        //   수정 시각(updated_at)은 UPDATE가 실제로 나갈 때 채워진다.
+        //   기본적으로 그 시점이 메서드가 끝난 뒤라서, 그냥 두면 응답의 updatedAt이 null로 나간다.
+        //   flush()로 "지금 DB에 반영해"라고 시켜서 수정 시각이 채워진 뒤 응답을 만든다.
+        postRepository.flush();
+
+        return PostResponse.fromEntity(post);
+    }
+
+    /**
+     * 게시글 삭제 (명세 FN-PST-004)
+     *
+     * 작성자 본인만 삭제할 수 있다.
+     * D-07 확정: 하드 삭제 → DB에서 실제로 지운다. 되돌릴 수 없다.
+     * 글에 딸린 URL·해시태그도 함께 지워진다.
+     */
+    @Transactional
+    public void delete(Long memberId, Long postId) {
+        Post post = findMyPost(memberId, postId);
+        postRepository.delete(post);
+    }
+
+    /**
+     * 글을 찾고, 내 글이 맞는지 확인한다. (수정·삭제에서 공통으로 쓰는 부분)
+     *
+     * 없는 글과 남의 글을 다른 에러로 구분하는 이유:
+     *   사용자 입장에서 "글이 사라졌다"와 "권한이 없다"는 다른 상황이라 안내 문구가 달라야 한다.
+     */
+    private Post findMyPost(Long memberId, Long postId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+
+        if (!post.isOwner(memberId)) {
+            throw new BusinessException(ErrorCode.POST_NOT_OWNER);
+        }
+        return post;
     }
 
     /**

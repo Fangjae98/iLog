@@ -5,14 +5,17 @@ import com.ilog.ilog.global.auth.LoginMember;
 import com.ilog.ilog.post.dto.PostCreateRequest;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
+import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.service.PostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -120,5 +123,42 @@ public class PostController {
                                                 @PathVariable Long postId) {
         // 조회는 "잘 가져왔다"는 뜻의 200 OK. ResponseEntity.ok(...)가 그 줄임 표현이다.
         return ResponseEntity.ok(postService.getPost(postId));
+    }
+
+    /**
+     * 게시글 수정 API (명세 FN-PST-003)
+     *
+     *   PUT /api/v1/posts/3
+     *
+     * PUT을 쓴 이유: 보낸 내용으로 글을 통째로 바꾸기 때문. (일부만 바꾸는 방식은 보통 PATCH)
+     * TODO API 명세서에 PATCH로 되어 있으면 @PutMapping → @PatchMapping 으로 바꾸면 된다.
+     *
+     * 작성자 본인만 가능: 남의 글이면 403 POST_NOT_OWNER
+     * 없는 글이면: 404 POST_NOT_FOUND
+     *
+     * 성공 응답: 200 OK + 수정된 게시글 JSON
+     */
+    @PutMapping("/{postId}")
+    public ResponseEntity<PostResponse> update(@Login LoginMember loginMember,
+                                               @PathVariable Long postId,
+                                               @Valid @RequestBody PostUpdateRequest request) {
+        return ResponseEntity.ok(postService.update(loginMember.memberId(), postId, request));
+    }
+
+    /**
+     * 게시글 삭제 API (명세 FN-PST-004)
+     *
+     *   DELETE /api/v1/posts/3
+     *
+     * 작성자 본인만 가능. D-07 확정에 따라 DB에서 실제로 지운다(복구 불가).
+     *
+     * 성공 응답: 204 No Content
+     *   = "잘 처리했고, 돌려줄 내용은 없다"는 뜻. 지워진 글을 응답에 담을 이유가 없어서 204를 쓴다.
+     */
+    @DeleteMapping("/{postId}")
+    public ResponseEntity<Void> delete(@Login LoginMember loginMember,
+                                       @PathVariable Long postId) {
+        postService.delete(loginMember.memberId(), postId);
+        return ResponseEntity.noContent().build();
     }
 }

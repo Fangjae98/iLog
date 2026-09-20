@@ -106,6 +106,37 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
         }
     }
 
+    /**
+     * 게시글 수정 (D-06 확정: 제목·본문·URL·태그 모두 수정 가능)
+     *
+     * Setter를 열어 두는 대신 이렇게 "무슨 일을 하는지 이름이 붙은" 메서드로만 값을 바꾼다.
+     * 아무 데서나 post.setTitle(...)을 할 수 있으면, 나중에 값이 어디서 바뀌었는지 찾기 어려워진다.
+     *
+     * JPA는 트랜잭션 안에서 엔티티 값이 바뀌면 자동으로 UPDATE 문을 만들어 준다(변경 감지).
+     * 그래서 이 메서드를 부르기만 하면 되고, 따로 save()를 부르지 않아도 된다.
+     */
+    public void update(String title, String content, List<String> urls, List<String> hashtags) {
+        this.title = title;
+        this.content = content;
+
+        // URL·태그는 "일부만 바꾸기"가 아니라 "받은 목록으로 통째로 교체"한다.
+        // 기존 것을 비우고 새로 담으면, 지워진 것은 DB에서도 삭제된다(orphanRemoval).
+        this.urls.clear();
+        if (urls != null) {
+            this.urls.addAll(urls);
+        }
+
+        this.hashtags.clear();
+        if (hashtags != null) {
+            hashtags.forEach(name -> this.hashtags.add(new PostHashtag(this, name)));
+        }
+    }
+
+    /** 이 글을 쓴 사람이 맞는지 확인한다. 수정·삭제 전에 Service에서 호출한다. */
+    public boolean isOwner(Long memberId) {
+        return this.memberId.equals(memberId);
+    }
+
     /** 응답을 만들 때 쓰기 편하도록 태그 객체 목록을 이름 목록으로 바꿔 준다. (예: ["여행", "맛집"]) */
     public List<String> getHashtagNames() {
         return hashtags.stream()
