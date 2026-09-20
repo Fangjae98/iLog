@@ -22,6 +22,21 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /*
+ * ===========================================================================
+ * TODO [Member → User 이름 통일] post 패키지에서 이 파일만 옛 이름을 쓰고 있다.
+ *
+ * 팀에서 global의 Member를 User로 통일했지만(feat/be/user-revise 브랜치),
+ * 아직 be 브랜치에 합쳐지지 않아 내 작업 공간에는 LoginUser 클래스가 없다.
+ * 지금 바꾸면 컴파일이 안 되므로, 합쳐진 뒤 아래 3가지를 한 번에 바꾼다.
+ *
+ *   1) import  : LoginMember → LoginUser
+ *   2) 파라미터 : LoginMember loginMember → LoginUser loginUser   (5곳)
+ *   3) 호출     : loginMember.memberId() → loginUser.userId()     (4곳)
+ *
+ * 개발용 헤더 X-Member-Id → X-User-Id 는 팀원 코드에서 바뀐다.
+ * post 패키지의 나머지 코드는 이미 userId / user_id 로 바꿔 두었다.
+ * ===========================================================================
+ *
  * [게시글 작성 흐름] ② Controller  ← 지금 이 파일 (요청이 가장 먼저 도착하는 곳)
  *
  *   ① Client ──POST /api/v1/posts──→ ② Controller → ③ Request DTO → ④ Service → ⑤ Entity → ⑥ Repository → DB
@@ -33,10 +48,10 @@ import org.springframework.web.bind.annotation.RestController;
  *   - Service가 돌려준 결과를 HTTP 응답으로 내보낸다.
  *   요리(비즈니스 로직)는 하지 않는다 → Service의 일.
  *
- * 요청 예시 (개발 단계에서는 로그인 대신 X-Member-Id 헤더로 회원 번호를 보낸다)
+ * 요청 예시 (개발 단계에서는 로그인 대신 헤더로 회원 번호를 보낸다)
  *
  *   POST /api/v1/posts
- *   X-Member-Id: 1
+ *   X-Member-Id: 1                  ← 팀원 변경 반영 후 X-User-Id
  *   Content-Type: application/json
  *
  *   {
@@ -54,7 +69,7 @@ public class PostController {
     private final PostService postService;
 
     /**
-     * 게시글 작성 API
+     * 게시글 작성 API (명세 FN-PST-001)
      *
      * 파라미터 설명
      *   @Login LoginMember loginMember
@@ -72,6 +87,7 @@ public class PostController {
     public ResponseEntity<PostResponse> create(@Login LoginMember loginMember,
                                                @Valid @RequestBody PostCreateRequest request) {
 
+        // TODO 팀원 변경 반영 후: loginUser.userId()
         PostResponse response = postService.create(loginMember.memberId(), request);
 
         // ResponseEntity = 응답 상태코드 + 본문을 함께 담는 상자.
@@ -79,24 +95,6 @@ public class PostController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    /**
-     * 게시글 상세 조회 API
-     *
-     *   GET /api/v1/posts/3      ← 3번 글 보기
-     *
-     * @PathVariable = 주소 안에 들어 있는 값을 꺼내는 어노테이션.
-     *   @GetMapping("/{postId}")의 {postId} 자리에 들어온 3이 파라미터 postId에 담긴다.
-     *   숫자가 아닌 값(/posts/abc)이 오면 400 에러가 난다. (global에서 처리)
-     *
-     * 성공 응답: 200 OK + 게시글 JSON
-     * 없는 글 번호면: 404 POST_NOT_FOUND (Service가 예외를 던지고 global이 응답으로 변환)
-     * 로그인 안 했으면: 401 UNAUTHORIZED
-     *
-     * 로그인한 회원만 볼 수 있다. (명세서 FN-PST-002 게시글 읽기 - 액터: 회원)
-     * @Login 파라미터를 적어 두기만 하면 로그인 검사가 되고, 로그인 정보가 없으면 401로 막힌다.
-     * 지금은 "누가 보는지"를 쓸 일이 없어서 loginMember 값을 사용하지는 않는다.
-     * (나중에 '내 글인지 표시' 같은 기능이 생기면 여기서 쓰면 된다)
-     */
     /**
      * 내 게시글 조회 API (명세 FN-PST-006)
      *
@@ -115,9 +113,28 @@ public class PostController {
     @GetMapping(params = "author=me")
     public ResponseEntity<PostPageResponse> getMyPosts(@Login LoginMember loginMember,
                                                        @RequestParam(defaultValue = "0") int page) {
+        // TODO 팀원 변경 반영 후: loginUser.userId()
         return ResponseEntity.ok(postService.getMyPosts(loginMember.memberId(), page));
     }
 
+    /**
+     * 게시글 상세 조회 API (명세 FN-PST-002)
+     *
+     *   GET /api/v1/posts/3      ← 3번 글 보기
+     *
+     * @PathVariable = 주소 안에 들어 있는 값을 꺼내는 어노테이션.
+     *   @GetMapping("/{postId}")의 {postId} 자리에 들어온 3이 파라미터 postId에 담긴다.
+     *   숫자가 아닌 값(/posts/abc)이 오면 400 에러가 난다. (global에서 처리)
+     *
+     * 성공 응답: 200 OK + 게시글 JSON
+     * 없는 글 번호면: 404 POST_NOT_FOUND (Service가 예외를 던지고 global이 응답으로 변환)
+     * 로그인 안 했으면: 401 UNAUTHORIZED
+     *
+     * 로그인한 회원만 볼 수 있다. (명세서 FN-PST-002 게시글 읽기 - 액터: 회원)
+     * @Login 파라미터를 적어 두기만 하면 로그인 검사가 되고, 로그인 정보가 없으면 401로 막힌다.
+     * 지금은 "누가 보는지"를 쓸 일이 없어서 loginMember 값을 사용하지는 않는다.
+     * (나중에 '내 글인지 표시' 같은 기능이 생기면 여기서 쓰면 된다)
+     */
     @GetMapping("/{postId}")
     public ResponseEntity<PostResponse> getPost(@Login LoginMember loginMember,
                                                 @PathVariable Long postId) {
@@ -142,6 +159,7 @@ public class PostController {
     public ResponseEntity<PostResponse> update(@Login LoginMember loginMember,
                                                @PathVariable Long postId,
                                                @Valid @RequestBody PostUpdateRequest request) {
+        // TODO 팀원 변경 반영 후: loginUser.userId()
         return ResponseEntity.ok(postService.update(loginMember.memberId(), postId, request));
     }
 
@@ -158,6 +176,7 @@ public class PostController {
     @DeleteMapping("/{postId}")
     public ResponseEntity<Void> delete(@Login LoginMember loginMember,
                                        @PathVariable Long postId) {
+        // TODO 팀원 변경 반영 후: loginUser.userId()
         postService.delete(loginMember.memberId(), postId);
         return ResponseEntity.noContent().build();
     }

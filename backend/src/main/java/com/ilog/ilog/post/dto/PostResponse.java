@@ -20,7 +20,7 @@ import java.util.List;
  */
 public record PostResponse(
         Long id,
-        Long memberId,
+        Long userId,
         String title,
         String content,
         List<String> urls,           // URL이 없으면 빈 목록 []
@@ -33,7 +33,7 @@ public record PostResponse(
     public static PostResponse fromEntity(Post post) {
         return new PostResponse(
                 post.getId(),
-                post.getMemberId(),
+                post.getUserId(),
                 post.getTitle(),
                 post.getContent(),
                 // urls는 post_url 표에 따로 있어서, 실제로 필요할 때 DB에서 읽어 온다(지연 로딩).

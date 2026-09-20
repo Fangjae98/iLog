@@ -19,7 +19,7 @@ import java.util.List;
  *   new PostCreateRequest("첫 글", "안녕하세요", List.of("https://a.com"), List.of("여행"))
  *
  * 엔티티(Post)를 직접 받지 않는 이유:
- *   엔티티에는 id, memberId처럼 클라이언트가 마음대로 정하면 안 되는 값이 있다.
+ *   엔티티에는 id, userId처럼 클라이언트가 마음대로 정하면 안 되는 값이 있다.
  *   DTO에는 "사용자가 입력하는 값"만 두어서 받을 수 있는 값을 제한한다.
  *
  * record = 값을 담기만 하는 클래스를 짧게 쓰는 문법.
@@ -51,14 +51,14 @@ public record PostCreateRequest(
 ) {
 
     // DTO → Entity 변환. Service에서 호출한다.
-    // memberId는 요청 JSON이 아니라 로그인 정보에서 꺼내 넘겨받는다.
+    // userId는 요청 JSON이 아니라 로그인 정보에서 꺼내 넘겨받는다.
     // (JSON으로 받으면 남의 회원 번호를 넣어서 대신 글을 쓸 수 있기 때문)
     //
     // hashtags를 파라미터로 따로 받는 이유:
     //   Service에서 '#' 제거·중복 제거 등으로 다듬은 태그 목록을 넘겨주기 때문.
-    public Post toEntity(Long memberId, List<String> refinedHashtags) {
+    public Post toEntity(Long userId, List<String> refinedHashtags) {
         return Post.builder()
-                .memberId(memberId)
+                .userId(userId)
                 .title(title)
                 .content(content)
                 .urls(urls)

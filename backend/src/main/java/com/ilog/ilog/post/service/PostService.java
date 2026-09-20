@@ -47,17 +47,17 @@ public class PostService {
     /**
      * 게시글 작성
      *
-     * @param memberId 로그인한 회원 번호 (Controller가 로그인 정보에서 꺼내 전달)
+     * @param userId 로그인한 회원 번호 (Controller가 로그인 정보에서 꺼내 전달)
      * @param request  사용자가 입력한 제목/내용/url/해시태그
      * @return 저장된 게시글 정보
      */
     @Transactional   // 쓰기 작업이라 readOnly를 풀어 줌. 중간에 예외가 나면 DB 변경이 모두 취소(롤백)된다
-    public PostResponse create(Long memberId, PostCreateRequest request) {
+    public PostResponse create(Long userId, PostCreateRequest request) {
         // 1. 해시태그 다듬기 + 개수 검사
         List<String> hashtags = refineHashtags(request.hashtags());
 
         // 2. DTO → Entity 변환 (아직 DB에 저장되기 전, id가 없는 상태)
-        Post post = request.toEntity(memberId, hashtags);
+        Post post = request.toEntity(userId, hashtags);
 
         // 3. DB에 저장 → INSERT 실행.
         //    이 순간 DB가 id를 매기고, created_at이 자동으로 채워진다.
@@ -94,14 +94,14 @@ public class PostService {
      *
      * 최신 글이 위로 오도록 정렬해서 한 쪽에 5개씩 돌려준다.
      *
-     * @param memberId 로그인한 회원 번호 → 이 사람이 쓴 글만 조회
+     * @param userId 로그인한 회원 번호 → 이 사람이 쓴 글만 조회
      * @param page     몇 번째 쪽인지 (0부터 시작)
      * @return 이번 쪽의 글 목록 + 전체 개수 같은 쪽 정보
      */
-    public PostPageResponse getMyPosts(Long memberId, int page) {
+    public PostPageResponse getMyPosts(Long userId, int page) {
         // PageRequest.of(쪽 번호, 개수) = "몇 번째 쪽을 몇 개씩 달라"는 주문서
-        Page<Post> myPosts = postRepository.findByMemberIdOrderByCreatedAtDesc(
-                memberId, PageRequest.of(page, MY_POST_PAGE_SIZE));
+        Page<Post> myPosts = postRepository.findByUserIdOrderByCreatedAtDesc(
+                userId, PageRequest.of(page, MY_POST_PAGE_SIZE));
 
         return PostPageResponse.fromPage(myPosts);
     }
@@ -115,8 +115,8 @@ public class PostService {
      * @throws BusinessException 글이 없으면 POST_NOT_FOUND(404), 남의 글이면 POST_NOT_OWNER(403)
      */
     @Transactional
-    public PostResponse update(Long memberId, Long postId, PostUpdateRequest request) {
-        Post post = findMyPost(memberId, postId);
+    public PostResponse update(Long userId, Long postId, PostUpdateRequest request) {
+        Post post = findMyPost(userId, postId);
 
         List<String> hashtags = refineHashtags(request.hashtags());
         post.update(request.title(), request.content(), request.urls(), hashtags);
@@ -142,8 +142,8 @@ public class PostService {
      * 글에 딸린 URL·해시태그도 함께 지워진다.
      */
     @Transactional
-    public void delete(Long memberId, Long postId) {
-        Post post = findMyPost(memberId, postId);
+    public void delete(Long userId, Long postId) {
+        Post post = findMyPost(userId, postId);
         postRepository.delete(post);
     }
 
@@ -153,11 +153,11 @@ public class PostService {
      * 없는 글과 남의 글을 다른 에러로 구분하는 이유:
      *   사용자 입장에서 "글이 사라졌다"와 "권한이 없다"는 다른 상황이라 안내 문구가 달라야 한다.
      */
-    private Post findMyPost(Long memberId, Long postId) {
+    private Post findMyPost(Long userId, Long postId) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
 
-        if (!post.isOwner(memberId)) {
+        if (!post.isOwner(userId)) {
             throw new BusinessException(ErrorCode.POST_NOT_OWNER);
         }
         return post;

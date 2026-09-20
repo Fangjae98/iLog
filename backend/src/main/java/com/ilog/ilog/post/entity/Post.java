@@ -51,9 +51,9 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     private Long id;
 
     // 글쓴이의 회원 번호. 지금은 숫자만 저장하고,
-    // Member 엔티티가 생기면 @ManyToOne 연관관계로 교체 예정
-    @Column(name = "member_id", nullable = false)         // 자바 필드명은 memberId, DB 컬럼명은 member_id / NOT NULL
-    private Long memberId;
+    // TODO User 엔티티(B 담당, feat/be/user-revise)가 be에 합쳐지면 @ManyToOne 연관관계로 교체 예정
+    @Column(name = "user_id", nullable = false)           // 자바 필드명은 userId, DB 컬럼명은 user_id / NOT NULL
+    private Long userId;
 
     @Column(nullable = false, length = 100)               // VARCHAR(100) NOT NULL
     private String title;
@@ -92,8 +92,8 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     // @Builder 덕분에 Post.builder().title("...").build() 형태로 호출.
     // id와 작성/수정일은 DB와 JPA가 채우므로 파라미터에서 뺐다.
     @Builder
-    private Post(Long memberId, String title, String content, List<String> urls, List<String> hashtags) {
-        this.memberId = memberId;
+    private Post(Long userId, String title, String content, List<String> urls, List<String> hashtags) {
+        this.userId = userId;
         this.title = title;
         this.content = content;
         // 받은 목록을 그대로 쓰지 않고 새 목록에 복사 → 바깥에서 원본 목록을 바꿔도 엔티티에 영향 없음
@@ -133,8 +133,8 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     }
 
     /** 이 글을 쓴 사람이 맞는지 확인한다. 수정·삭제 전에 Service에서 호출한다. */
-    public boolean isOwner(Long memberId) {
-        return this.memberId.equals(memberId);
+    public boolean isOwner(Long userId) {
+        return this.userId.equals(userId);
     }
 
     /** 응답을 만들 때 쓰기 편하도록 태그 객체 목록을 이름 목록으로 바꿔 준다. (예: ["여행", "맛집"]) */
