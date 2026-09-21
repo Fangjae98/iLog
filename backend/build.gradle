@@ -31,6 +31,11 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	// 통합 테스트용 PostgreSQL 컨테이너. 버전은 Spring Boot BOM 이 정한다 (Testcontainers 2.0.5).
+	// 주의: 2.x 에서 좌표가 바뀌었다. 1.x 의 org.testcontainers:postgresql / :junit-jupiter 는 BOM 에 없다.
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'      // @ServiceConnection
+	testImplementation 'org.testcontainers:testcontainers-postgresql'             // PostgreSQLContainer
+	testImplementation 'org.testcontainers:testcontainers-junit-jupiter'          // @EnabledIfDockerAvailable
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
