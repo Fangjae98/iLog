@@ -1,0 +1,10 @@
+{
+  // 저장소를 열면 VS Code 가 아래 확장 설치를 권합니다.
+  "recommendations": [
+    "vscjava.vscode-java-pack", // Java + Gradle + 테스트 + 디버그
+    "vmware.vscode-boot-dev-pack", // Spring Boot
+    "Vue.volar", // frontend/
+    "EditorConfig.EditorConfig", // .editorconfig 를 VS Code 에서 동작시킵니다
+    "ms-azuretools.vscode-containers" // docker compose
+  ]
+}

@@ -5,6 +5,11 @@
 .DS_Store
 
 # IDE
-.vscode/
+# 팀 공용 에디터 설정만 커밋합니다.
+# 디렉터리째(.vscode/) 무시하면 git 이 폴더 안으로 들어가지 않아 아래 ! 예외가
+# 동작하지 않습니다. frontend/.gitignore 와 같은 .vscode/* 형태를 씁니다.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.iml
