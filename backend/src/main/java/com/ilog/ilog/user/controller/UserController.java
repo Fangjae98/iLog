@@ -85,6 +85,8 @@ public class UserController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` / `TOKEN_EXPIRED` — 로그인 필요, 토큰 만료, 탈퇴 회원",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 로그인 정보의 회원 번호로 회원을 찾을 수 없다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping("/me/password-verification")
     public PasswordVerificationResponse verifyPassword(@Login LoginUser loginUser,
                                                        @Valid @RequestBody PasswordVerificationRequest request) {
@@ -97,6 +99,8 @@ public class UserController {
     @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(길이·문자 규칙) 또는 `NICKNAME_UNCHANGED`(현재 닉네임과 같음)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` / `TOKEN_EXPIRED` — 로그인 필요, 토큰 만료, 탈퇴 회원",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 로그인 정보의 회원 번호로 회원을 찾을 수 없다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "409", description = "`USER_DUPLICATE_NICKNAME` — 이미 사용 중인 닉네임",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
