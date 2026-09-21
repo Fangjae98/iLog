@@ -1,6 +1,7 @@
 package com.ilog.ilog.post.dto;
 
 import com.ilog.ilog.post.entity.Post;
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
@@ -25,11 +26,23 @@ import java.util.List;
  *      공통으로 쓰기로 하면 global 패키지로 옮길 수 있다.
  */
 public record PostPageResponse(
+        // example 을 두지 않는 이유: 항목이 PostSummaryResponse 객체라 예시가 그쪽과 중복되고 같이 관리해야 한다.
+        @Schema(description = "이번 쪽에 담긴 게시글 요약 목록")
         List<PostSummaryResponse> content,
+
+        @Schema(description = "현재 쪽 번호. 0부터 시작한다.", example = "0")
         int page,
+
+        @Schema(description = "한 쪽에 담기는 게시글 수. 내 게시글 조회는 5로 고정이다.", example = "5")
         int size,
+
+        @Schema(description = "조건에 맞는 전체 게시글 수", example = "12")
         long totalElements,
+
+        @Schema(description = "전체 쪽 수", example = "3")
         int totalPages,
+
+        @Schema(description = "다음 쪽이 있는지. 프론트의 '더 보기' 버튼 판단에 쓴다.", example = "true")
         boolean hasNext
 ) {
 

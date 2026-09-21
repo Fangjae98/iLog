@@ -1,6 +1,7 @@
 package com.ilog.ilog.post.dto;
 
 import com.ilog.ilog.post.entity.Post;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -30,10 +31,14 @@ public record PostCreateRequest(
         // 아래 검증 어노테이션은 Controller에서 @Valid를 붙였을 때 동작한다.
         // 규칙을 어기면 400 에러가 나고, message가 응답의 errors[].reason에 담긴다.
 
+        @Schema(description = "게시글 제목. 100자 이하로 입력한다. 비었거나 공백만 있으면 400 `INVALID_INPUT` 이 난다.",
+                example = "오늘 배운 Spring Data JPA")
         @NotBlank(message = "제목은 필수입니다.")               // null, "", "   " 모두 거부
         @Size(max = 100, message = "제목은 100자 이하로 입력해주세요.")   // 엔티티의 length = 100과 맞춤
         String title,
 
+        @Schema(description = "게시글 본문. 길이 제한은 없다. 비었거나 공백만 있으면 400 `INVALID_INPUT` 이 난다.",
+                example = "영속성 컨텍스트와 변경 감지를 정리했다.")
         @NotBlank(message = "내용은 필수입니다.")
         String content,
 
@@ -41,12 +46,17 @@ public record PostCreateRequest(
         // 목록 자체는 선택 입력(안 보내도 됨). 보낸다면 각 항목은 빈 문자열이면 안 된다.
         // <@NotBlank String> = "목록 안의 각 문자열"에 규칙을 거는 문법
         // TODO D-08 최대 개수 확정되면 @Size(max = N, message = "...")를 추가
+        @Schema(description = "참고 링크 목록. 생략하거나 빈 배열로 보낼 수 있다. 각 항목은 빈 값일 수 없다. 최대 개수는 아직 정하지 않았다(D-08).",
+                example = "[\"https://docs.spring.io/spring-data/jpa/reference/\"]")
         List<@NotBlank(message = "URL은 빈 값일 수 없습니다.") String> urls,
 
         // 해시태그. JSON에서는 "hashtags": ["여행", "맛집"] 형태로 보낸다. 안 보내도 됨.
         // 최대 개수(10개) 검사는 여기가 아니라 Service에서 한다.
         // 이유: 팀이 만들어 둔 전용 에러 코드(HASHTAG_LIMIT_EXCEEDED)로 응답하기 위해서.
         // (여기서 @Size로 막으면 일반 입력값 오류인 INVALID_INPUT으로 나간다)
+        @Schema(description = "해시태그 목록. 생략하거나 빈 배열로 보낼 수 있다. 서버가 맨 앞 `#` 과 앞뒤 공백을 지우고 중복을 없앤 뒤 저장한다. "
+                + "다듬은 뒤 개수가 10개를 넘으면 400 `HASHTAG_LIMIT_EXCEEDED` 가 난다(D-09).",
+                example = "[\"여행\",\"맛집\"]")
         List<@NotBlank(message = "해시태그는 빈 값일 수 없습니다.") String> hashtags
 ) {
 
