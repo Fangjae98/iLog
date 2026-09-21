@@ -39,3 +39,19 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// 소스 인코딩 고정.
+// javac 의 기본 소스 인코딩은 빌드를 실행하는 JVM 의 기본 문자셋을 따라갑니다.
+// Java 소스 44 개 중 39 개에 한글 주석·문자열이 있어서, CP949 로케일의 Windows 에서
+// 빌드하면 글자가 깨지거나 컴파일이 실패할 수 있습니다. -encoding 을 직접 넘깁니다.
+//
+// JDK 18 부터 JVM 기본 문자셋이 UTF-8 이라 JDK 25 로 빌드하면 대개 이미 UTF-8 입니다.
+// 우연히 맞는 상태를 한 줄로 못박아 두는 것입니다.
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+}
+
+// 테스트 JVM 과 테스트 리포트 인코딩도 같이 고정합니다.
+tasks.withType(Test).configureEach {
+	defaultCharacterEncoding = 'UTF-8'
+}
