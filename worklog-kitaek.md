@@ -125,6 +125,143 @@ global이 `Member`, user/post가 `User`/`member_id`로 갈려 있었습니다.
 
 ---
 
+## 2026-09-21 — 전체 API Swagger 문서화 + 게시글 500 오류 2건 수정
+
+작업자: kitaek
+브랜치: `feat/be/revise-swagger` (base: `be` 최신 `8c98081`)
+상태: 작업 완료, 커밋 전. 테스트 78개 중 77개 통과 (실패 1건은 아래 5번의 기존 환경 문제)
+
+---
+
+### 1. be 최신화 — 로컬이 하루 묵어 있었습니다
+
+`post` 패키지가 아직 `be`에 없는 줄 알았는데, 로컬 remote-tracking ref가
+9/20 22:42에 멈춰 있던 것이었습니다.
+
+| 기준 | 커밋 | 내용 |
+|---|---|---|
+| 로컬이 알고 있던 `origin/be` | `59aa46b` | Merge PR #6 (`feat/be/user-signup`) |
+| 실제 원격 `be` | `8c98081` | **Merge PR #5 (`feat/be/post-create`)** |
+
+`git fetch` 후 fast-forward 한 번으로 따라잡았습니다. 이 브랜치에 자체 커밋이
+없어서 충돌은 없었습니다.
+
+> **브랜치를 새로 따기 전에 `git fetch`부터 하세요.** `git branch -vv`가 보여주는 건
+> 로컬이 마지막으로 기억하는 원격 상태입니다. fetch를 건너뛰면 이미 머지된 코드를
+> 없는 줄 알고 다시 만들 수 있습니다. 네트워크에서 실제 상태만 읽고 싶으면
+> `git ls-remote --heads origin`이 로컬을 건드리지 않아 안전합니다.
+
+---
+
+### 2. 문서화한 API
+
+게시글 5개를 새로 문서화했습니다. 요구사항 ID는 전부 기존 javadoc에 있던 것을 그대로 썼습니다.
+
+| ID | API | 문서에 적은 응답 |
+|---|---|---|
+| FN-PST-001 | `POST /api/v1/posts` | 201 / 400 (`INVALID_INPUT`·`HASHTAG_LIMIT_EXCEEDED`) / 401 |
+| FN-PST-006 | `GET /api/v1/posts?author=me` | 200 / 400 / 401 |
+| FN-PST-002 | `GET /api/v1/posts/{postId}` | 200 / 400 / 401 / 404 |
+| FN-PST-003 | `PUT /api/v1/posts/{postId}` | 200 / 400 / 401 / 403 / 404 |
+| FN-PST-004 | `DELETE /api/v1/posts/{postId}` | 204 / 400 / 401 / 403 / 404 |
+
+적는 기준은 `UserController`의 기존 관례를 그대로 따랐습니다.
+
+- 실제로 예외를 던지는 지점이 있는 코드만 적습니다. `create`는 글을 조회하지 않으므로
+  403·404를 달지 않았습니다.
+- 전역으로 나갈 수 있는 405·500·`API_NOT_FOUND`는 엔드포인트마다 적지 않습니다.
+- 성공 응답에는 `content`를 쓰지 않습니다. springdoc이 반환 타입 스키마를 알아서 넣습니다.
+- 실패 응답은 전부 `@Content(schema = @Schema(implementation = ErrorResponse.class))`.
+
+`@Login` 파라미터에는 아무것도 붙이지 않았습니다. `OpenApiConfig`의
+`loginOperationCustomizer`가 자물쇠와 `X-User-Id` 입력칸을 이미 자동으로 붙여줍니다.
+
+DTO는 `@Schema(description, example)`만 씁니다. `maxLength`·`pattern`은 적지 않았습니다.
+`@Size`·`@NotBlank`가 이미 스키마에 반영되기 때문에 두 군데에 같은 숫자를 적어두면
+한쪽만 고쳐질 위험이 있습니다.
+
+---
+
+### 3. 변경 파일
+
+새 문서화 (`backend/src/main/java/com/ilog/ilog/`)
+
+| 경로 | 처리 |
+|---|---|
+| `post/controller/PostController` | `@Tag` + 5개 메서드에 `@Operation`·`@ApiResponse` |
+| `post/dto/` 5개 | 레코드 컴포넌트마다 `@Schema` |
+| `global/error/ErrorResponse` | 5개 필드 + 중첩 `FieldError` 2개에 `@Schema` |
+
+기존 파일 보완 (3개)
+
+| 파일 | 변경 | 이유 |
+|---|---|---|
+| `user/controller/UserController` | MBR-05·MBR-06에 404 `USER_NOT_FOUND` 추가 | 둘 다 `UserService.getActiveUser`를 거쳐 실제로 404를 던지는데 문서에 없었습니다. `UserServiceTest`에 이미 검증이 있습니다 |
+| `user/dto/SignupRequest` | 설명의 ErrorCode에 백틱 | post 쪽과 표기 통일 |
+| `user/dto/NicknameUpdateRequest` | 설명의 ErrorCode에 백틱 + 409 코드명 명시 | 위와 같음 |
+
+테스트
+
+| 경로 | 처리 |
+|---|---|
+| `global/config/OpenApiDocsTest` | `@WebMvcTest`에 `PostController` 추가, `PostService` 목 주입, 게시글 검증 6개 추가 (8개 → 15개) |
+| `post/controller/PostControllerTest` | **새 파일.** 아래 4번 수정에 대한 회귀 테스트 2개 |
+
+---
+
+### 4. 문서화하다 발견한 500 오류 2건
+
+둘 다 잘 만든 요청인데 500이 나가던 것이라 함께 고쳤습니다.
+**`global` 공용 파일을 건드렸으므로 확인이 필요합니다.**
+
+| # | 증상 | 원인 | 수정 |
+|---|---|---|---|
+| 1 | `GET /api/v1/posts?author=me&page=-1` → 500 | `PageRequest.of`가 `IllegalArgumentException`을 던지고 `handleUnknown`으로 빠짐 | `page`에 `@PositiveOrZero`. `GlobalExceptionHandler.handleParamValid`가 이미 받는 예외라 새 핸들러는 없습니다 |
+| 2 | `GET /api/v1/posts` (author 누락) → 500 | `params = "author=me"` 조건에 안 맞아 `UnsatisfiedServletRequestParameterException`이 나는데 받는 핸들러가 없었음 | `GlobalExceptionHandler`에 `4-1)` 핸들러 추가 → 400 `INVALID_INPUT` |
+
+둘 다 수정 전에는 실패하고 수정 후에 통과하는 것을 확인했습니다
+(수정분만 `git stash`로 잠시 빼고 대조).
+
+2번과 관련해 **springdoc은 `params = "author=me"` 조건을 문서로 옮기지 않습니다.**
+그대로 두면 Swagger UI의 Try it out이 `author` 없이 요청을 보내 방금 그 500을 그대로 맞습니다.
+그래서 `getMyPosts`에 문서 전용 `@Parameter`를 하나 선언했습니다.
+메서드 인자에 바인딩되지 않은 선언이라 동작에는 영향이 없고, UI 입력칸에 `me`가 미리 채워집니다.
+
+---
+
+### 5. 검증
+
+| 테스트 | 개수 | 결과 |
+|---|---|---|
+| `OpenApiDocsTest` | 15 | 통과 |
+| `UserServiceTest` | 27 | 통과 |
+| `UserControllerTest` | 21 | 통과 |
+| `GlobalExceptionHandlerTest` | 12 | 통과 |
+| `PostControllerTest` | 2 | 통과 |
+| `IlogApplicationTests` | 1 | **실패 (기존 문제, 이번 작업과 무관)** |
+
+`IlogApplicationTests`는 `application-local.properties`가 없어서
+`'url' attribute is not specified`로 DataSource를 못 만듭니다.
+`application-local.properties.example`을 복사하면 해결됩니다 (9/20 작업 2번 참고).
+
+Swagger UI 육안 확인은 DB가 필요해서 아직 못 했습니다. 로컬 DB를 띄운 뒤
+`http://localhost:8080/swagger-ui.html`에서 `User`·`Post` 두 태그와
+`author` 입력칸을 확인해 주세요.
+
+---
+
+### 6. 일부러 하지 않은 것
+
+- **`PostController`의 PUT → PATCH 변경.** `update` 메서드 javadoc의 TODO에 "명세서에 PATCH로
+  되어 있으면 바꾸라"고 적혀 있는데, 명세서를 확인하지 못해 그대로 뒀습니다. (seokyoung 소관)
+- **`PostSummaryResponse.nickname`의 `example`.** `fromEntity`가 항상 `null`을 넣고 있어서
+  예시를 적으면 실제 동작과 어긋납니다. 설명에 "`User` 엔티티와 연결하기 전까지 항상 null"이라고만 적었습니다.
+- **`PostPageResponse.content`의 `example`.** 중첩 객체 배열이라 예시가 `PostSummaryResponse`와
+  중복되고 같이 관리해야 합니다. 설명만 적었습니다.
+- **`urls` 최대 개수.** D-08 미확정이라 "최대 개수는 아직 정하지 않았다(D-08)"로 적었습니다.
+
+---
+
 ## 결정이 필요한 것
 
 ### 1. ~~`User` vs `Member`~~ — 해결됨 (위 4번 작업으로 반영)
@@ -141,6 +278,22 @@ global이 `Member`, user/post가 `User`/`member_id`로 갈려 있었습니다.
 
 서비스·컨트롤러·DTO도 만들지 않았습니다. API 스펙(엔드포인트, 검증 규칙)이
 정해지면 이어서 작업합니다.
+
+### 3. 게시글 API의 401 문구 (2026-09-21)
+
+회원 API는 401 설명에 `UNAUTHORIZED`와 `TOKEN_EXPIRED`를 함께 적어뒀는데,
+`TOKEN_EXPIRED`는 아직 `main/` 어디서도 던지지 않습니다 (ErrorCode 선언에도 `[논의 필요]`).
+3단계 JWT를 내다본 표기로 보여 회원 쪽은 그대로 뒀고,
+게시글 쪽은 코드로 확인되는 `UNAUTHORIZED`만 적었습니다.
+JWT 적용 때 양쪽을 어느 쪽으로 맞출지 정해주세요.
+
+### 4. `GET /api/v1/posts` 경로 충돌 (2026-09-21)
+
+A 담당 목록·검색 API가 같은 `GET /api/v1/posts`로 들어오면,
+springdoc이 두 핸들러를 **하나의 operation으로 병합**합니다.
+summary가 하나만 남고 파라미터·응답이 뒤섞여서, `author` 파라미터가
+A의 목록 API에도 붙어버립니다. 어노테이션으로는 못 막고 경로를 나눠야 합니다
+(예: 내 글은 `/api/v1/posts/me`). **A가 머지하기 전에 정하는 게 좋습니다.**
 
 ---
 
