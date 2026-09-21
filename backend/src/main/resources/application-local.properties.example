@@ -6,13 +6,22 @@
 #
 # application-local.properties 는 backend/.gitignore 에 등록되어 커밋되지 않습니다.
 # 실제 DB 비밀번호는 팀 채팅으로 공유합니다.
+#
+# 주의: Spring Boot 는 .properties 파일을 ISO-8859-1 로 읽습니다.
+#       값(value)에 한글을 쓰면 깨지므로 ASCII 만 쓰세요. 주석은 상관없습니다.
 
 spring.datasource.url=jdbc:postgresql://localhost:5432/ilogdb
-spring.datasource.username=여기에_DB계정명
-spring.datasource.password=여기에_비밀번호
+spring.datasource.username=your_db_user
+spring.datasource.password=your_db_password
 
 # 로컬에서 실행되는 SQL 을 보고 싶을 때 (format_sql 은 application.properties 에 이미 켜져 있음)
 spring.jpa.show-sql=true
 
-# 참고: 5432 포트가 이미 쓰이고 있다면 (로컬에 PostgreSQL 을 직접 설치한 경우)
+# 팀 표준 DB 는 docker-compose.yml 의 postgres:16 컨테이너입니다.
+# 컴퓨터에 PostgreSQL 17 등 다른 버전이 설치되어 있어도,
+# 기능 확인과 버그 재현은 이 컨테이너를 기준으로 합니다.
+#
+# 5432 포트가 이미 쓰이고 있다면 (로컬에 PostgreSQL 을 직접 설치한 경우)
+# 먼저 로컬 PostgreSQL 을 중지해 보고, 그럴 수 없을 때만
 # docker-compose.yml 의 포트를 "5433:5432" 로 바꾸고 위 url 도 5433 으로 맞추세요.
+# 이때도 실제로 붙는 DB 는 컨테이너의 16 이어야 합니다.

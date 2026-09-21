@@ -125,11 +125,11 @@ global이 `Member`, user/post가 `User`/`member_id`로 갈려 있었습니다.
 
 ---
 
-## 2026-09-21 — 전체 API Swagger 문서화 + 게시글 500 오류 2건 수정
+## 2026-09-21 — 전체 API Swagger 문서화 + 게시글 500 오류 2건 수정 + 개발환경 재현성 정리
 
 작업자: kitaek
 브랜치: `feat/be/revise-swagger` (base: `be` 최신 `8c98081`)
-상태: 작업 완료, 커밋 전. 테스트 78개 중 77개 통과 (실패 1건은 아래 5번의 기존 환경 문제)
+상태: 커밋·푸시 완료. 테스트 78개 중 77개 통과 (실패 1건은 아래 5번의 기존 환경 문제)
 
 ---
 
@@ -262,6 +262,189 @@ Swagger UI 육안 확인은 DB가 필요해서 아직 못 했습니다. 로컬 D
 
 ---
 
+### 7. 개발환경 재현성 정리 (IDE 빨간 줄 근본 해결)
+
+문서화 작업 중 `UserController.java`에 빨간 줄이 50개 떴습니다. `./gradlew compileJava`는
+통과하는데 에디터에만 보이는 오류였습니다.
+
+**원인은 JDK가 아니라 낡은 클래스패스였습니다.** Java 언어 서버가 캐시해 둔
+`backend/.classpath`를 직접 열어 보니 항목이 141개 있는데 `swagger`·`springdoc` 문자열이
+**하나도 없었고**, 그 파일이 `build.gradle`보다 먼저 쓰인 상태였습니다.
+워크스페이스 설정이 `java.configuration.updateBuildConfiguration: "interactive"`라
+동기화 알림을 놓치면 클래스패스가 옛날 것으로 남습니다.
+
+> **이건 재발이 예정된 구조였습니다.** 그 설정 파일은 `ilog_pjt/.vscode/settings.json` —
+> 저장소 **바깥**이라 커밋 자체가 불가능합니다. 9/20에 최재은도 같은 계열의 오류
+> (`java.lang.Object cannot be resolved`)를 겪고 그 파일에 `java.configuration.runtimes`를
+> 넣었다고 적었는데, **지금 그 키가 없습니다.** 공유도 안 되고 보존도 안 되는 자리입니다.
+
+같은 성격(이미 깨졌는데 고쳐지지 않은 환경 문제)의 항목을 함께 정리했습니다.
+
+| # | 문제 | 조치 |
+|---|---|---|
+| 1 | Windows에서 `gradlew`가 CRLF로 받아져 `docker compose up --build`가 죽음 | `.gitattributes` 추가 |
+| 2 | 끝 개행이 없어 머지 충돌이 남 (9/20에 실제로 겪음) | `.editorconfig` + 끝 개행 5개 파일 |
+| 3 | IDE 설정이 저장소 밖이라 공유·보존 불가 | `.vscode/` 화이트리스트 커밋 |
+| 4 | 소스 인코딩 미고정. 자바 44개 중 39개에 한글 | `build.gradle`에 UTF-8 고정 |
+
+#### 변경 파일
+
+| 경로 | 처리 |
+|---|---|
+| `.gitattributes` | 신규. 기본 `* text=auto eol=lf`, `gradlew`·`*.sh`는 LF, `*.bat`은 CRLF, 바이너리 표시 |
+| `.editorconfig` | 신규. 들여쓰기 값은 실제 파일을 세어 맞춤 (Java 4칸, `*.gradle` 탭, 프론트 2칸) |
+| `.vscode/settings.json` | 신규. `updateBuildConfiguration: automatic` + `gradle.nestedProjects: true` |
+| `.vscode/extensions.json` | 신규. Java·Spring·Vue·EditorConfig·컨테이너 확장 권장 |
+| `.gitignore` | `.vscode/` → `.vscode/*` + `!` 예외 |
+| `backend/build.gradle` | `JavaCompile.options.encoding`, `Test.defaultCharacterEncoding` = UTF-8 |
+| `backend/gradle.properties` | 신규. 데몬 JVM에 `-Dfile.encoding=UTF-8` |
+| `application-local.properties.example` | 자리표시자 ASCII화, PostgreSQL 16 기준 명시 |
+| 끝 개행 5개 | `.env.example`, `.gitignore`, `backend/.gitignore`, `backend/Dockerfile`, `docker-compose.yml` |
+
+> **인프라 파트 확인 필요.** `.gitattributes`·`.editorconfig`·`.gitignore`는 저장소 전체에
+> 영향을 주는 공용 파일이라 인프라 파트 소관과 겹칩니다. 항목별로 커밋을 나눠 뒀으니
+> 필요하면 커밋 단위로 되돌릴 수 있습니다.
+
+#### 줄바꿈 재정규화 — 실제로 바뀐 파일은 1개
+
+`.gitattributes`를 넣으면서 `git add --renormalize .`를 함께 돌렸습니다.
+추적 중인 92개 파일을 전수 조사했는데 CR을 가진 텍스트 파일은 `backend/gradlew.bat`
+하나뿐이었습니다. 줄바꿈 말고 내용 변화는 0입니다
+(`git diff --cached --ignore-cr-at-eol`이 비어 있음).
+작업 트리의 `gradlew.bat`은 `*.bat text eol=crlf` 규칙으로 계속 CRLF로 체크아웃되므로
+Windows에서 실행하는 파일은 달라지지 않습니다.
+
+#### 검증
+
+CP949 로케일로 일부러 빌드해서 한글이 깨지지 않는지 확인했습니다.
+
+```bash
+LANG=ko_KR.eucKR LC_ALL=ko_KR.eucKR ./gradlew clean compileJava   # BUILD SUCCESSFUL
+javap -v -p build/classes/.../UserPolicy.class | grep Utf8        # 한글 온전
+```
+
+`git check-attr text eol -- backend/gradlew` → `set` / `lf`,
+`gradlew.bat` → `set` / `crlf`. 전체 테스트는 78개 중 77개 통과
+(나머지 1개는 DB 설정이 없어 실패하는 기존 `IlogApplicationTests`).
+
+---
+
+### 8. IDE 설정 (VS Code) — 팀원용 안내
+
+#### `iLog` 폴더를 직접 여세요
+
+**저장소의 상위 폴더를 열면 안 됩니다.** VS Code는 **연 폴더 바로 아래의
+`.vscode/settings.json`만** 읽습니다. 상위 폴더를 열면 방금 커밋한 설정이 통째로
+무시되고, 사람마다 설정이 달라져 빨간 줄 문제가 계속 되풀이됩니다.
+
+```bash
+code iLog     # O
+code .        # O (iLog 안에서)
+code ..       # X
+```
+
+처음 열면 오른쪽 아래에 권장 확장 설치 알림이 뜹니다. 수락해 주세요.
+특히 `EditorConfig.EditorConfig`가 없으면 `.editorconfig`가 VS Code에서 동작하지 않습니다.
+그다음 상태바의 `Importing Gradle project…`가 끝날 때까지 기다립니다.
+
+#### 에디터에만 빨간 줄이 뜰 때
+
+`./gradlew compileJava`는 되는데 에디터에만 오류가 보이는 경우입니다. 둘 중 하나입니다.
+
+**(1) `The import io.swagger cannot be resolved` — 클래스패스가 낡음**
+
+`build.gradle`에 의존성을 추가했는데 Java 확장이 다시 읽지 않은 상태입니다.
+이번에 `automatic`으로 바꿔 뒀으니 저장소 폴더를 직접 열었다면 자동으로 갱신됩니다.
+그래도 남아 있으면 명령 팔레트(`Cmd/Ctrl+Shift+P`) →
+`Java: Clean Java Language Server Workspace` → **Restart and delete**.
+
+**(2) `java.lang.Object cannot be resolved` — JDK 25를 못 찾음**
+
+Java 언어 서버는 Gradle이 `~/.gradle/jdks`에 받아 둔 JDK를 모를 수 있습니다.
+JDK 25를 직접 설치한 뒤 **사용자 설정**에 자기 컴퓨터 경로를 등록하세요.
+(`Cmd/Ctrl+Shift+P` → `Preferences: Open User Settings (JSON)`)
+경로가 사람마다 달라서 저장소에는 커밋하지 않습니다.
+
+```jsonc
+{
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-25",
+      "path": "/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home",
+      "default": true
+    }
+  ]
+}
+```
+
+Windows는 `"C:\\Program Files\\Eclipse Adoptium\\jdk-25..."`처럼 역슬래시를 두 번 씁니다.
+`path`는 `bin` 폴더가 아니라 JDK 설치 폴더를 가리켜야 합니다.
+
+#### JDK 25 설치
+
+`backend/settings.gradle`에 Foojay toolchain 플러그인이 있어서, `./gradlew` 빌드만 할
+거라면 Gradle이 JDK 25를 `~/.gradle/jdks`에 자동으로 받습니다. 따로 설치하지 않아도
+빌드는 됩니다. 다만 VS Code의 Java 확장은 그 JDK를 모를 수 있고 Gradle 캐시가 지워지면
+같이 사라지므로, 직접 설치해 두는 쪽이 안정적입니다.
+
+| OS | 설치 |
+|---|---|
+| macOS | `brew install --cask temurin@25` |
+| Windows | `winget install EclipseAdoptium.Temurin.25.JDK` |
+| Linux | [Adoptium](https://adoptium.net/temurin/releases/?version=25)에서 JDK 25 |
+
+#### PostgreSQL은 16으로 통일합니다
+
+`docker-compose.yml`의 `postgres:16` 컨테이너가 팀 표준 환경입니다.
+컴퓨터에 PostgreSQL 17이 설치되어 있어도 기능 확인과 버그 재현은 이 컨테이너를
+기준으로 합니다. 2단계 작업 때 두 사람 모두 로컬 17로 검증했는데 배포 환경은 16이라,
+서로 다른 DB를 보고 있던 상태였습니다.
+
+5432 포트가 이미 쓰이고 있다면 무엇이 쓰는지 먼저 확인하세요.
+
+| OS | 확인 | 중지 |
+|---|---|---|
+| macOS | `sudo lsof -i :5432` | `brew services stop postgresql@17` |
+| Windows | `netstat -ano \| findstr :5432` | 서비스 앱에서 `postgresql-x64-17` 중지 |
+| Linux | `sudo ss -lptn 'sport = :5432'` | `sudo systemctl stop postgresql` |
+
+로컬 PostgreSQL을 멈추고 컨테이너를 쓰는 것이 기본입니다.
+
+#### pull 한 뒤 해야 할 일
+
+`.gitattributes`가 들어오면 `git status`에 파일 여러 개가 `modified`로 보일 수 있습니다
+(내용은 안 바뀐 상태입니다). **그 상태로 `git add .` 하지 마세요.**
+
+```bash
+git stash -u                  # 커밋 안 된 작업이 있으면 먼저
+git pull
+git status --porcelain        # 비어 있으면 그대로 끝
+
+# 비어 있지 않고 전부 modified 로만 보일 때만:
+git rm --cached -r . -q && git reset --hard
+git status --porcelain        # 이제 비어 있어야 함
+git stash pop
+
+cd backend && ./gradlew --stop && ./gradlew clean build
+```
+
+`core.autocrlf`는 그대로 둬도 됩니다. `.gitattributes`의 `eol=lf`가 우선합니다.
+
+#### 일부러 하지 않은 것
+
+- **`README.md`는 건드리지 않았습니다.** 위 안내(IDE 설정, JDK·포트 3-OS 표, PostgreSQL 16
+  통일)는 원래 README에 들어갈 내용인데 이번에는 여기에만 적었습니다.
+- **`README.md`의 끝 개행**도 그래서 빼뒀습니다. 저장소에서 끝 개행이 없는 파일은 이제
+  이것 하나뿐이라, 누군가 저장하면 1줄 diff가 생길 수 있습니다.
+- **`IlogApplication.java`·`IlogApplicationTests.java`의 탭 들여쓰기**(합 5줄).
+  Spring Initializr 산출물이고 "기존 코드 재포맷 금지" 방침에 따라 그대로 뒀습니다.
+  나중에 그 파일을 손댈 때 함께 맞추면 됩니다.
+- **버전 고정과 CI**는 이번 범위에서 뺐습니다. Docker 이미지 태그가 전부 floating이고
+  (`postgres:16`, `eclipse-temurin:25-jdk`, `node:22-alpine` 등), `.github/workflows`도
+  `Jenkinsfile`도 없습니다. 아래 "결정이 필요한 것" 5번 참고.
+
+---
+
 ## 결정이 필요한 것
 
 ### 1. ~~`User` vs `Member`~~ — 해결됨 (위 4번 작업으로 반영)
@@ -294,6 +477,22 @@ springdoc이 두 핸들러를 **하나의 operation으로 병합**합니다.
 summary가 하나만 남고 파라미터·응답이 뒤섞여서, `author` 파라미터가
 A의 목록 API에도 붙어버립니다. 어노테이션으로는 못 막고 경로를 나눠야 합니다
 (예: 내 글은 `/api/v1/posts/me`). **A가 머지하기 전에 정하는 게 좋습니다.**
+
+### 5. 개발환경 남은 항목 (2026-09-21)
+
+이번에 "이미 깨진 것"만 고치고 나머지는 남겨 뒀습니다.
+
+| 항목 | 현재 상태 |
+|---|---|
+| README 반영 | 위 8번 안내를 README로 옮길지 |
+| Docker 이미지 태그 | `postgres:16`, `eclipse-temurin:25-jdk`, `node:22-alpine`, `nginx:1.27-alpine` 전부 floating. pull 시점마다 패치 레벨이 다름 |
+| Gradle 배포본 검증 | `gradle-wrapper.properties`에 `distributionSha256Sum` 없음 |
+| toolchain vendor | `build.gradle`의 toolchain에 vendor가 없어 Foojay가 머신마다 다른 벤더의 JDK 25를 받을 수 있음 |
+| Node 버전 | `.nvmrc`·`.node-version` 없음. `engines`는 `^22.18.0 \|\| >=24.12.0`로 두 메이저 허용이고 `engine-strict` 설정도 없음 |
+| CI | `.github/workflows`도 `Jenkinsfile`도 없음. 누가 깨뜨려도 머지 전에 모름 |
+| DB 마이그레이션 | `ddl-auto=update`. Flyway·Liquibase 없어서 컬럼 삭제·타입 변경이 반영되지 않음 |
+| `feat/auth-foundation` | `backend/.gradle/`·`backend/build/`·`.DS_Store` 등 빌드 산출물 30개가 커밋되어 있음. develop에 머지되면 따라 들어옴 |
+| dev 모드 프론트↔백 연결 | `vite.config.js`에 `server.proxy` 없고 백엔드에 CORS 설정도 없음. `nginx.conf`의 `/api` 프록시는 컨테이너 경로에만 있음 |
 
 ---
 
@@ -329,7 +528,8 @@ develop이 앞으로 나아가면 깨지는데, develop 변경 6가지를 시뮬
 - **`docker compose up --build`가 실패합니다.** `core.autocrlf=true` 때문에
   `gradlew`가 CRLF로 체크아웃되어 리눅스 컨테이너 안에서
   `/bin/sh^M: bad interpreter`가 납니다. 저장소에는 LF로 저장되어 있으므로
-  `.gitattributes`에 `gradlew text eol=lf` 한 줄이면 해결됩니다. (인프라 파트 확인 필요)
+  `.gitattributes`에 `gradlew text eol=lf` 한 줄이면 해결됩니다.
+  **→ 2026-09-21에 `.gitattributes`를 추가해 해결했습니다 (위 7번 작업).**
 
 ### 다른 브랜치 문제
 
