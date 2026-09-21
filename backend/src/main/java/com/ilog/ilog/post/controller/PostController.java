@@ -2,12 +2,21 @@ package com.ilog.ilog.post.controller;
 
 import com.ilog.ilog.global.auth.Login;
 import com.ilog.ilog.global.auth.LoginUser;
+import com.ilog.ilog.global.error.ErrorResponse;
 import com.ilog.ilog.post.dto.PostCreateRequest;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.service.PostService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +55,7 @@ import org.springframework.web.bind.annotation.RestController;
  *     "hashtags": ["여행", "맛집"]     // 선택, 최대 10개
  *   }
  */
+@Tag(name = "Post", description = "게시글")
 @RestController                  // 반환값을 JSON으로 바꿔서 응답하는 컨트롤러
 @RequestMapping("/api/v1/posts") // 이 클래스의 모든 API 주소 앞에 붙는 공통 경로
 @RequiredArgsConstructor         // final 필드(PostService)를 Spring이 넣어 줌
@@ -68,6 +78,18 @@ public class PostController {
      *
      * 성공 응답: 201 Created + 저장된 게시글 JSON
      */
+    @Operation(summary = "게시글 작성 (FN-PST-001)",
+            description = """
+                    로그인한 회원이 새 게시글을 쓴다. 성공하면 201 과 저장된 게시글을 돌려준다.
+
+                    작성자는 요청 본문이 아니라 로그인 정보에서 정한다. `urls` 와 `hashtags` 는 보내지 않아도 된다.
+
+                    처리 순서: 입력값 검증 → 해시태그 다듬기(맨 앞 `#` 제거, 앞뒤 공백 제거, 중복 제거) → 개수 검사 → 저장.""")
+    @ApiResponse(responseCode = "201", description = "작성 성공. 저장된 게시글을 돌려준다")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용 누락, 제목 100자 초과, `urls`·`hashtags` 의 항목이 빈 값) 또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping   // HTTP POST 요청 + 주소 /api/v1/posts 를 이 메서드가 처리
     public ResponseEntity<PostResponse> create(@Login LoginUser loginUser,
                                                @Valid @RequestBody PostCreateRequest request) {
@@ -94,8 +116,28 @@ public class PostController {
      * 누구 글을 보여 줄지는 로그인 정보에서 정한다.
      * (회원 번호를 요청으로 받으면 남의 글 목록을 볼 수 있게 되므로)
      */
+    @Operation(summary = "내 게시글 조회 (FN-PST-006)",
+            description = """
+                    로그인한 회원이 쓴 글만 최신순으로 한 쪽에 5개씩 돌려준다.
+
+                    목록·검색 API 와 주소가 같아서 `author=me` 쿼리로 구분한다. 이 값이 없으면 이 메서드로 오지 않는다.
+                    누구 글을 보여 줄지는 로그인 정보로 정하므로 회원 번호를 요청으로 받지 않는다.
+                    `page` 는 0부터 시작하고, 보내지 않으면 0쪽으로 본다.
+                    작성자 닉네임은 `User` 엔티티와 연결하기 전까지 null 로 나간다.""")
+    @ApiResponse(responseCode = "200", description = "조회 성공. 이번 쪽의 글 목록과 쪽 정보를 돌려준다")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — `page` 가 숫자가 아니거나 음수다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    // springdoc 은 params = "author=me" 조건을 문서에 옮기지 않는다.
+    // 그대로 두면 Swagger UI 의 Try it out 이 author 없이 요청을 보내 이 메서드를 못 찾는다.
+    // 아래 @Parameter 는 메서드 인자에 바인딩되지 않은 문서 전용 선언이라 동작에는 영향이 없다.
+    @Parameter(name = "author", in = ParameterIn.QUERY, required = true,
+            description = "이 API 를 고르는 구분값. `me` 만 쓸 수 있다. 목록·검색 API 와 주소가 같아서 필요하다.",
+            example = "me")
     @GetMapping(params = "author=me")
     public ResponseEntity<PostPageResponse> getMyPosts(@Login LoginUser loginUser,
+                                                       @PositiveOrZero(message = "쪽 번호는 0 이상이어야 합니다.")
                                                        @RequestParam(defaultValue = "0") int page) {
         return ResponseEntity.ok(postService.getMyPosts(loginUser.userId(), page));
     }
@@ -118,6 +160,17 @@ public class PostController {
      * 지금은 "누가 보는지"를 쓸 일이 없어서 loginUser 값을 사용하지는 않는다.
      * (나중에 '내 글인지 표시' 같은 기능이 생기면 여기서 쓰면 된다)
      */
+    @Operation(summary = "게시글 상세 조회 (FN-PST-002)",
+            description = """
+                    게시글 하나를 제목·본문·URL·해시태그까지 모두 돌려준다. 로그인한 회원만 볼 수 있다.
+                    지금은 누가 보는지를 쓰지 않아서 남의 글도 볼 수 있다.""")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — `postId` 에 숫자가 아닌 값을 보냈다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/{postId}")
     public ResponseEntity<PostResponse> getPost(@Login LoginUser loginUser,
                                                 @PathVariable Long postId) {
@@ -138,6 +191,21 @@ public class PostController {
      *
      * 성공 응답: 200 OK + 수정된 게시글 JSON
      */
+    @Operation(summary = "게시글 수정 (FN-PST-003)",
+            description = """
+                    작성자 본인만 수정할 수 있다. 보낸 내용으로 제목·본문·URL·해시태그를 통째로 교체한다(D-06).
+
+                    `urls` 나 `hashtags` 를 보내지 않거나 빈 배열로 보내면 원래 있던 값이 모두 지워진다.
+                    없는 글(404)과 남의 글(403)은 다른 코드로 구분해서 돌려준다.""")
+    @ApiResponse(responseCode = "200", description = "수정 성공. 수정 일시가 채워진 게시글을 돌려준다")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용 누락, 제목 100자 초과, 항목이 빈 값, `postId` 가 숫자 아님) 또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "`POST_NOT_OWNER` — 남이 쓴 글이다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PutMapping("/{postId}")
     public ResponseEntity<PostResponse> update(@Login LoginUser loginUser,
                                                @PathVariable Long postId,
@@ -155,6 +223,19 @@ public class PostController {
      * 성공 응답: 204 No Content
      *   = "잘 처리했고, 돌려줄 내용은 없다"는 뜻. 지워진 글을 응답에 담을 이유가 없어서 204를 쓴다.
      */
+    @Operation(summary = "게시글 삭제 (FN-PST-004)",
+            description = """
+                    작성자 본인만 삭제할 수 있다. D-07 확정에 따라 DB 에서 실제로 지우므로 되돌릴 수 없다.
+                    글에 딸린 URL·해시태그도 함께 지워진다. 돌려줄 내용이 없어서 204 로 응답한다.""")
+    @ApiResponse(responseCode = "204", description = "삭제 성공. 본문 없음")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — `postId` 에 숫자가 아닌 값을 보냈다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "`POST_NOT_OWNER` — 남이 쓴 글이다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @DeleteMapping("/{postId}")
     public ResponseEntity<Void> delete(@Login LoginUser loginUser,
                                        @PathVariable Long postId) {

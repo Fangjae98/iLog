@@ -6,6 +6,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.UnsatisfiedServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -49,6 +50,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException e) {
         return toResponse(ErrorCode.INVALID_INPUT,
                 List.of(new ErrorResponse.FieldError(e.getParameterName(), "필수 값입니다.")));
+    }
+
+    // 4-1) 구분용 파라미터 누락 (params 조건이 걸린 매핑에 그 값이 없이 들어온 경우)
+    //      예: GET /api/v1/posts 는 params = "author=me" 로 매핑되어 있어서 author 가 없으면 여기로 온다.
+    //      처리하지 않으면 8)로 떨어져 잘 만든 요청에도 500이 나간다.
+    @ExceptionHandler(UnsatisfiedServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleUnsatisfiedParam(UnsatisfiedServletRequestParameterException e) {
+        return toResponse(ErrorCode.INVALID_INPUT, List.of());
     }
 
     // 5) 타입 불일치 (/posts/abc)

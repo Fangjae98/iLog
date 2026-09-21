@@ -1,6 +1,7 @@
 package com.ilog.ilog.post.dto;
 
 import com.ilog.ilog.post.entity.Post;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,13 +20,31 @@ import java.util.List;
  *   2) 응답 모양을 DB 구조와 따로 관리할 수 있다. (예: 작성자 닉네임 추가)
  */
 public record PostResponse(
+        @Schema(description = "게시글 번호", example = "1")
         Long id,
+
+        @Schema(description = "작성자 회원 번호", example = "1")
         Long userId,
+
+        @Schema(description = "게시글 제목", example = "오늘 배운 Spring Data JPA")
         String title,
+
+        @Schema(description = "게시글 본문", example = "영속성 컨텍스트와 변경 감지를 정리했다.")
         String content,
+
+        @Schema(description = "참고 링크 목록. 없으면 빈 배열이다.",
+                example = "[\"https://docs.spring.io/spring-data/jpa/reference/\"]")
         List<String> urls,           // URL이 없으면 빈 목록 []
+
+        @Schema(description = "해시태그 목록. 맨 앞 `#` 을 뗀 이름만 담는다. 없으면 빈 배열이다.",
+                example = "[\"여행\",\"맛집\"]")
         List<String> hashtags,       // 태그가 없으면 빈 목록 []
+
+        @Schema(description = "작성 일시 (KST)", example = "2026-09-20T15:00:00")
         LocalDateTime createdAt,
+
+        @Schema(description = "수정 일시 (KST). 한 번도 수정하지 않았으면 null 이다.",
+                nullable = true, example = "2026-09-21T09:30:00")
         LocalDateTime updatedAt      // 처음 작성할 때는 null (수정해야 값이 생김)
 ) {
 
