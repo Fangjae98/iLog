@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -136,6 +137,7 @@ public class PostController {
             example = "me")
     @GetMapping(params = "author=me")
     public ResponseEntity<PostPageResponse> getMyPosts(@Login LoginUser loginUser,
+                                                       @PositiveOrZero(message = "쪽 번호는 0 이상이어야 합니다.")
                                                        @RequestParam(defaultValue = "0") int page) {
         return ResponseEntity.ok(postService.getMyPosts(loginUser.userId(), page));
     }
