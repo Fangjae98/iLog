@@ -1,5 +1,7 @@
 package com.ilog.ilog.global.config;
 
+import com.ilog.ilog.auth.controller.AuthController;
+import com.ilog.ilog.auth.service.AuthService;
 import com.ilog.ilog.post.controller.PostController;
 import com.ilog.ilog.post.service.PostService;
 import com.ilog.ilog.user.controller.UserController;
@@ -28,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 새 도메인 컨트롤러를 문서에서 확인하려면 아래 목록에 추가하고 필요한 서비스를 @MockitoBean 으로 채운다.
  * (Post 가 그 예다 — PostController 를 넣고 PostService 를 목으로 채웠다)
  */
-@WebMvcTest({UserController.class, PostController.class})
+@WebMvcTest({UserController.class, PostController.class, AuthController.class})
 @Import({SecurityConfig.class, OpenApiConfig.class})
 @ImportAutoConfiguration({
         SpringDocConfiguration.class, SpringDocConfigProperties.class, SpringDocSpecPropertiesConfiguration.class,
@@ -48,6 +50,9 @@ class OpenApiDocsTest {
     @MockitoBean
     PostService postService;
 
+    @MockitoBean
+    AuthService authService;
+
     @Test
     void 문서_정보() throws Exception {
         mockMvc.perform(get(DOCS))
@@ -57,7 +62,8 @@ class OpenApiDocsTest {
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
                 .andExpect(jsonPath("$.tags[?(@.name=='User')].description").value("회원"))
-                .andExpect(jsonPath("$.tags[?(@.name=='Post')].description").value("게시글"));
+                .andExpect(jsonPath("$.tags[?(@.name=='Post')].description").value("게시글"))
+                .andExpect(jsonPath("$.tags[?(@.name=='Auth')].description").value("인증"));
     }
 
     @Test
@@ -206,6 +212,25 @@ class OpenApiDocsTest {
                 .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.errors.description").exists())
                 .andExpect(jsonPath("$.components.schemas.FieldError.properties.field.example").value("title"))
                 .andExpect(jsonPath("$.components.schemas.FieldError.properties.reason.example").value("제목은 필수입니다."));
+    }
+
+    @Test
+    void 로그인_API는_인증_없이_부르고_토큰_응답_스키마를_가리킨다() throws Exception {
+        String login = "$.paths['/api/v1/auth/tokens'].post";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(login + ".summary").value("로그인 (토큰 발급)"))
+                // 로그인 전에 부르는 API 라 자물쇠와 개발용 헤더가 붙지 않는다
+                .andExpect(jsonPath(login + ".security").doesNotExist())
+                .andExpect(jsonPath(login + ".parameters").doesNotExist())
+                .andExpect(jsonPath(login + ".responses['200'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/LoginResponse"))
+                .andExpect(jsonPath(login + ".responses['401'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath("$.components.schemas.LoginRequest.properties.password.format").value("password"))
+                .andExpect(jsonPath("$.components.schemas.LoginResponse.properties.user").exists())
+                // 응답 안의 회원 요약이 LoginUser 스키마로 새어 나오지 않는다
+                .andExpect(jsonPath("$.components.schemas.LoginUser").doesNotExist());
     }
 
     @Test

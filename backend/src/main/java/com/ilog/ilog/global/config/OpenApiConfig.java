@@ -47,7 +47,7 @@ public class OpenApiConfig {
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")
                         .bearerFormat("JWT")
-                        .description("로그인(`POST /auth/tokens`)으로 받은 accessToken. `Authorization: Bearer {accessToken}`")));
+                        .description("로그인(`POST /api/v1/auth/tokens`)으로 받은 accessToken. `Authorization: Bearer {accessToken}`")));
     }
 
     /**
