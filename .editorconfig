@@ -1,0 +1,42 @@
+# 에디터가 달라도 들여쓰기 · 줄바꿈 · 인코딩을 같게 맞춥니다. https://editorconfig.org
+#
+# VS Code 는 EditorConfig.EditorConfig 확장을 설치해야 동작합니다.
+# (.vscode/extensions.json 의 권장 목록에 들어 있습니다)
+# IntelliJ IDEA 는 기본으로 지원합니다.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Java: 직접 작성한 소스는 모두 공백 4칸입니다.
+# (IlogApplication.java 와 IlogApplicationTests.java 는 Spring Initializr 가
+#  만든 파일이라 탭입니다. EditorConfig 는 기존 내용을 고치지 않으므로 그대로 두고,
+#  그 파일을 손댈 일이 생기면 그때 함께 맞춥니다)
+[*.java]
+indent_style = space
+indent_size = 4
+
+# Gradle 스크립트: build.gradle 과 settings.gradle 이 탭입니다 (Spring Initializr 기본).
+[*.gradle]
+indent_style = tab
+indent_size = 4
+
+# 프론트엔드: Vite 템플릿 기본인 공백 2칸입니다.
+[*.{js,mjs,cjs,ts,mts,vue,json,jsonc,css,scss,html}]
+indent_style = space
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Markdown 은 줄 끝 공백 2칸이 줄바꿈 문법이라 지우지 않습니다.
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows 배치 파일은 CRLF 를 유지해야 합니다 (.gitattributes 와 같은 규칙).
+[*.{bat,cmd}]
+end_of_line = crlf
