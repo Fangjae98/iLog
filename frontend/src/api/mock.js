@@ -1,6 +1,7 @@
 // MOCK: 백엔드 API가 머지되면 이 파일을 통째로 지우고 .env 의 VITE_USE_MOCK 도 없앤다.
 // 구현 지침 10장. 반환 모양은 인터셉터를 거친 뒤(봉투를 벗긴 data)와 똑같이 맞춘다.
 import { resolveMessage } from '@/constants/errorMessages'
+import { RULES } from '@/constants/rules'
 
 export const MOCK_ENABLED = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -32,7 +33,7 @@ const db = {
 }
 
 const userById = (id) => db.users.find((u) => u.userId === id)
-const userByEmail = (email) => db.users.find((u) => u.email === email)
+const userByEmail = (email) => db.users.find((u) => u.email.toLowerCase() === email.toLowerCase())
 const me = () => userById(db.currentUserId)
 const toListItem = (p) => ({
   postId: p.postId, title: p.title, nickname: userById(p.userId).nickname,
@@ -98,20 +99,26 @@ export const mockAuth = {
 }
 
 export const mockUser = {
-  async signup({ email, password, passwordConfirm, name, nickname }) {
+  async signup({ email, password, name, nickname }) {
     await delay()
-    if (password !== passwordConfirm) return fail(400, 'PASSWORD_CONFIRM_MISMATCH', { passwordConfirm: '비밀번호 확인이 일치하지 않습니다' })
-    if (userByEmail(email)) return fail(400, 'EMAIL_DUPLICATED', { email: '이미 사용 중입니다' })
-    if (db.users.some((u) => u.nickname === nickname)) return fail(400, 'NICKNAME_DUPLICATED', { nickname: '이미 사용 중입니다' })
+    if (!RULES.EMAIL_PATTERN.test(email)) return fail(400, 'INVALID_INPUT', { email: '이메일 형식을 확인해 주세요' })
+    if (!RULES.PASSWORD_PATTERN.test(password)) return fail(400, 'INVALID_PASSWORD_FORMAT', { password: '비밀번호 규칙을 확인해 주세요' })
+    if (!RULES.NICKNAME_PATTERN.test(nickname)) return fail(400, 'INVALID_INPUT', { nickname: '닉네임 규칙을 확인해 주세요' })
+    const existing = userByEmail(email)
+    if (existing) {
+      const code = existing.status === 'WITHDRAWN' ? 'REJOIN_RESTRICTED' : 'USER_DUPLICATE_EMAIL'
+      return fail(409, code, { email: resolveMessage(code) })
+    }
+    if (db.users.some((u) => u.nickname === nickname)) return fail(409, 'USER_DUPLICATE_NICKNAME', { nickname: '이미 사용 중인 닉네임입니다' })
     const userId = db.users.length + 1
-    db.users.push({ userId, email, password, name, nickname, status: 'ACTIVE', passwordResetRequired: false, createdAt: iso(Date.now()) })
+    db.users.push({ userId, email: email.toLowerCase(), password, name, nickname, status: 'ACTIVE', passwordResetRequired: false, createdAt: iso(Date.now()) })
     return { userId }
   },
   async checkEmail(email) {
     await delay(150)
     const u = userByEmail(email)
     if (!u) return { available: true, reason: null }
-    return { available: false, reason: u.status === 'WITHDRAWN' ? 'WITHDRAWN' : 'IN_USE' }
+    return { available: false, reason: u.status === 'WITHDRAWN' ? 'WITHDRAWN' : 'DUPLICATE' }
   },
   async checkNickname(nickname) {
     await delay(150)
