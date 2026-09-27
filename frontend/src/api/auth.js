@@ -11,11 +11,11 @@ export const authApi = {
       : client.post('/auth/tokens', body),
   // body: { email, password }
 
-  // 현재 로그인 세션을 종료한다
+  // Mock에서는 가짜 로그인 상태를 초기화하고, 실제 서비스에서는 서버 요청 없이 완료한다
   logout: () =>
     MOCK_ENABLED
       ? mockAuth.logout()
-      : client.delete('/auth/tokens'),
+      : Promise.resolve(),
 
   // 이메일과 이름을 확인하여 임시 비밀번호 발급을 요청한다
   issueTempPassword: (body) =>
