@@ -4,6 +4,7 @@ export const ERROR_MESSAGES = {
     //공통 에러 메시지
   INTERNAL_ERROR: '요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.',
   INVALID_INPUT: '입력값을 확인해 주세요.',
+  INVALID_PASSWORD_FORMAT: '비밀번호 규칙을 확인해 주세요.',
   NETWORK_ERROR: '서버에 연결할 수 없어요. 네트워크를 확인해 주세요.',
 
   //user-login 에서 필요한 메시지
@@ -15,9 +16,12 @@ export const ERROR_MESSAGES = {
   PASSWORD_MISMATCH: '비밀번호가 일치하지 않아요.',
   PASSWORD_CONFIRM_MISMATCH: '비밀번호 확인이 일치하지 않아요.',
   PASSWORD_RECENTLY_USED: '최근에 사용한 비밀번호는 다시 쓸 수 없어요.',
-  EMAIL_DUPLICATED: '이미 가입된 이메일이에요.',
-  NICKNAME_DUPLICATED: '이미 사용 중인 닉네임이에요.',
+  EMAIL_DUPLICATED: '이미 가입된 이메일입니다.',
+  NICKNAME_DUPLICATED: '이미 사용 중인 닉네임입니다.',
   NICKNAME_SAME_AS_CURRENT: '지금 쓰고 있는 닉네임과 같아요.',
+  USER_DUPLICATE_EMAIL: '이미 사용 중인 이메일입니다.',
+  USER_DUPLICATE_NICKNAME: '이미 사용 중인 닉네임입니다.',
+  REJOIN_RESTRICTED: '탈퇴 후 재가입 제한 기간인 이메일입니다.',
   POST_NOT_FOUND: '삭제되었거나 존재하지 않는 글이에요.',
   POST_NOT_OWNED: '본인이 작성한 글만 수정·삭제할 수 있어요.',
   HASHTAG_NOT_FOUND: '이미 삭제된 해시태그예요.',
