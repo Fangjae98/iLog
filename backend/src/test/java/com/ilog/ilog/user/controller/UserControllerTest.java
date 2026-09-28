@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -89,6 +90,21 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errors[?(@.field=='name')]").exists())
                 .andExpect(jsonPath("$.errors[?(@.field=='nickname')].reason")
                         .value("닉네임은 2~10자의 한글, 영문, 숫자만 가능합니다."));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void 영어_로케일로_요청해도_검증_문구는_한국어다() throws Exception {
+        // G2: spring.web.locale=ko + locale-resolver=fixed. @Email 은 message 를 지정하지 않아
+        // hibernate-validator 의 기본 문구를 쓰므로, 로케일 고정이 풀리면 영어로 새어 나간다.
+        mockMvc.perform(post("/api/v1/users")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"not-email","password":"Passw0rd!","name":"박기택","nickname":"기택"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field=='email')].reason")
+                        .value("올바른 형식의 이메일 주소여야 합니다"));
         verifyNoInteractions(userService);
     }
 
@@ -209,8 +225,9 @@ class UserControllerTest {
 
     @Test
     void 재확인에_성공하면_개인정보를_돌려준다() throws Exception {
+        // 나노초를 일부러 넣는다. G1 대로 소수점이 잘려야 아래 createdAt 단언이 통과한다 (JacksonDateTimeModule)
         when(userService.verifyPassword(1L, "Passw0rd!")).thenReturn(new PasswordVerificationResponse(
-                "user@example.com", "박기택", "기택", LocalDateTime.of(2026, 9, 16, 10, 0, 0), null));
+                "user@example.com", "박기택", "기택", LocalDateTime.of(2026, 9, 16, 10, 0, 0, 123_456_789), null));
 
         mockMvc.perform(post("/api/v1/users/me/password-verification")
                         .header("X-User-Id", "1")
