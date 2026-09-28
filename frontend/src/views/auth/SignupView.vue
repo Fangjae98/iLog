@@ -295,6 +295,7 @@ async function onSubmit() {
   border-radius: 50%;
   background: transparent;
 }
+.rule-list li.passed { color: var(--label); text-decoration: line-through; }
 .rule-list li.passed::before { background: var(--text); }
 .submit { margin-top: 36px; }
 .foot { margin-top: 14px; text-align: center; color: var(--muted); font-size: var(--fs-xs); }
