@@ -20,6 +20,7 @@ import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.ilog.ilog.support.SecuredSliceTestSupport;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -32,13 +33,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * (Post 가 그 예다 — PostController 를 넣고 PostService 를 목으로 채웠다)
  */
 @WebMvcTest({UserController.class, PostController.class, AuthController.class})
-@Import({SecurityConfig.class, OpenApiConfig.class})
+@Import(OpenApiConfig.class)
 @ImportAutoConfiguration({
         SpringDocConfiguration.class, SpringDocConfigProperties.class, SpringDocSpecPropertiesConfiguration.class,
         SpringDocWebMvcConfiguration.class,
         SwaggerConfig.class, SwaggerUiConfigProperties.class, SwaggerUiOAuthProperties.class
 })
-class OpenApiDocsTest {
+class OpenApiDocsTest extends SecuredSliceTestSupport {
 
     private static final String DOCS = "/v3/api-docs";
 
@@ -102,7 +103,16 @@ class OpenApiDocsTest {
     }
 
     @Test
-    void 로그인이_필요한_API만_인증과_개발용_헤더가_붙는다() throws Exception {
+    void 문서와_Swagger_UI는_토큰_없이_열린다() throws Exception {
+        // T08 에서 permitAll 을 풀 때 Swagger 경로를 빠뜨리면 문서를 아무도 못 본다.
+        // 위 테스트들이 전부 토큰 없이 /v3/api-docs 를 부르고 있어 사실상 매번 확인되지만,
+        // 의도를 이름으로 남겨 둔다.
+        mockMvc.perform(get(DOCS)).andExpect(status().isOk());
+        mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
+    }
+
+    @Test
+    void 로그인이_필요한_API에만_자물쇠가_붙는다() throws Exception {
         String reauth = "$.paths['/api/v1/users/me/password-verification'].post";
         String patch = "$.paths['/api/v1/users/me'].patch";
         String signup = "$.paths['/api/v1/users'].post";
@@ -111,19 +121,18 @@ class OpenApiDocsTest {
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath(reauth + ".security[0].bearerAuth").exists())
                 .andExpect(jsonPath(patch + ".security[0].bearerAuth").exists())
-                .andExpect(jsonPath(reauth + ".parameters[?(@.name=='X-User-Id' && @.in=='header')]").isNotEmpty())
-                .andExpect(jsonPath(patch + ".parameters[?(@.name=='X-User-Id' && @.in=='header')]").isNotEmpty())
                 // 로그인 없이 부르는 API 에는 붙지 않는다
                 .andExpect(jsonPath(signup + ".security").doesNotExist())
-                .andExpect(jsonPath(emailCheck + ".security").doesNotExist())
-                .andExpect(jsonPath(emailCheck + ".parameters[?(@.name=='X-User-Id')]").isEmpty());
+                .andExpect(jsonPath(emailCheck + ".security").doesNotExist());
     }
 
     @Test
     void LoginUser는_요청_파라미터로_새어나가지_않는다() throws Exception {
+        // body 만 받는 인증 API 라 요청 파라미터가 하나도 없어야 한다.
+        // (T08 전에는 개발용 X-User-Id 헤더가 있어서 "userId 가 없는지"만 볼 수 있었다)
         mockMvc.perform(get(DOCS))
-                .andExpect(jsonPath("$.paths['/api/v1/users/me/password-verification'].post.parameters[?(@.name=='userId' || @.name=='tempPassword')]").isEmpty())
-                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.parameters[?(@.name=='userId' || @.name=='tempPassword')]").isEmpty())
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/password-verification'].post.parameters").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.parameters").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.LoginUser").doesNotExist());
     }
 
@@ -179,9 +188,9 @@ class OpenApiDocsTest {
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.security[0].bearerAuth").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].put.security[0].bearerAuth").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.security[0].bearerAuth").exists())
-                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.parameters[?(@.name=='X-User-Id' && @.in=='header')]").isNotEmpty())
-                // LoginUser 는 전역 설정으로 숨겨져 있어서 요청 파라미터로 새어 나오지 않는다
-                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.parameters[?(@.name=='userId' || @.name=='tempPassword')]").isEmpty());
+                // LoginUser 는 전역 설정으로 숨겨져 있어서 요청 파라미터로 새어 나오지 않는다.
+                // 개발용 헤더까지 없앤 지금은 이 오퍼레이션에 파라미터가 아예 없다 (T08).
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.parameters").doesNotExist());
     }
 
     @Test
@@ -238,7 +247,7 @@ class OpenApiDocsTest {
 
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath(login + ".summary").value("로그인 (토큰 발급)"))
-                // 로그인 전에 부르는 API 라 자물쇠와 개발용 헤더가 붙지 않는다
+                // 로그인 전에 부르는 API 라 자물쇠가 붙지 않는다
                 .andExpect(jsonPath(login + ".security").doesNotExist())
                 .andExpect(jsonPath(login + ".parameters").doesNotExist())
                 .andExpect(jsonPath(login + ".responses['200'].content['application/json'].schema['$ref']")

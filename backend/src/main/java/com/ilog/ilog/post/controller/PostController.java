@@ -42,10 +42,10 @@ import org.springframework.web.bind.annotation.RestController;
  *   - Service가 돌려준 결과를 HTTP 응답으로 내보낸다.
  *   요리(비즈니스 로직)는 하지 않는다 → Service의 일.
  *
- * 요청 예시 (개발 단계에서는 로그인 대신 헤더로 회원 번호를 보낸다)
+ * 요청 예시 (로그인해서 받은 accessToken 을 Authorization 헤더에 붙인다)
  *
  *   POST /api/v1/posts
- *   X-User-Id: 1
+ *   Authorization: Bearer {accessToken}
  *   Content-Type: application/json
  *
  *   {

@@ -4,14 +4,12 @@ import com.ilog.ilog.auth.dto.LoginResponse;
 import com.ilog.ilog.auth.dto.TemporaryPasswordResponse;
 import com.ilog.ilog.auth.service.AuthService;
 import com.ilog.ilog.auth.service.TemporaryPasswordService;
-import com.ilog.ilog.global.auth.jwt.JwtTokenProvider;
-import com.ilog.ilog.global.config.SecurityConfig;
+import com.ilog.ilog.support.SecuredSliceTestSupport;
 import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -28,17 +26,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@Import(SecurityConfig.class)
-class AuthControllerTest {
+class AuthControllerTest extends SecuredSliceTestSupport {
 
     private static final String URL = "/api/v1/auth/tokens";
 
     @Autowired
     MockMvc mockMvc;
-
-    /** SecurityConfig 가 빈으로 등록해 준다. 로그아웃 테스트에 진짜 토큰이 필요하다. */
-    @Autowired
-    JwtTokenProvider jwtTokenProvider;
 
     @MockitoBean
     AuthService authService;
@@ -115,7 +108,7 @@ class AuthControllerTest {
     void 로그아웃하면_204이고_서버는_아무것도_하지_않는다() throws Exception {
         // A4: 토큰 저장소가 없어 서버 상태 변화가 없다. 실제 로그아웃은 프론트가 토큰을 지우는 것.
         mockMvc.perform(delete(URL)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtTokenProvider.createAccessToken(1L, false)))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1)))
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
 
