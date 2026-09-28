@@ -63,7 +63,7 @@ class AuthServiceTest {
     @Test
     void 임시_비밀번호로_로그인하면_비밀번호_변경이_필요하다고_알린다() {
         User user = user(1L);
-        user.issueTempPassword(passwordEncoder.encode("Temp1234!"));
+        user.issueTempPassword(passwordEncoder.encode("Temp1234!"), LocalDateTime.now().plusHours(1));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         LoginResponse response = authService.login(EMAIL, "Temp1234!");
@@ -96,12 +96,51 @@ class AuthServiceTest {
     }
 
     @Test
-    void 탈퇴_회원은_비밀번호가_맞아도_LOGIN_FAILED() {
+    void 임시_비밀번호가_만료됐으면_TEMP_PASSWORD_EXPIRED() {
+        // U6: 발급 후 24시간. 만료되면 다시 발급받아야 한다.
         User user = user(1L);
-        user.withdraw(LocalDateTime.now());
+        user.issueTempPassword(passwordEncoder.encode("Temp1234!"), LocalDateTime.now().minusMinutes(1));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(EMAIL, "Temp1234!"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TEMP_PASSWORD_EXPIRED));
+    }
+
+    /**
+     * U2 로 기대값이 뒤집힌 테스트다. 예전에는 탈퇴 회원도 LOGIN_FAILED 였지만,
+     * 이제 비밀번호까지 맞은 경우에만 탈퇴 사실을 알려 준다(프론트가 복구 안내를 띄워야 해서).
+     */
+    @Test
+    void 탈퇴_30일_이내면_USER_WITHDRAWN() {
+        User user = user(1L);
+        user.withdraw(LocalDateTime.now().minusDays(29));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(EMAIL, RAW_PASSWORD))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.USER_WITHDRAWN));
+    }
+
+    @Test
+    void 탈퇴_30일이_지났으면_LOGIN_FAILED() {
+        // 곧 물리 삭제될 계정이라 존재 자체를 알리지 않는다
+        User user = user(1L);
+        user.withdraw(LocalDateTime.now().minusDays(31));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         assertLoginFailed(() -> authService.login(EMAIL, RAW_PASSWORD));
+    }
+
+    @Test
+    void 탈퇴_회원이어도_비밀번호가_틀리면_LOGIN_FAILED() {
+        // 순서 고정: 비밀번호 검사(2번)가 탈퇴 검사(3번)보다 먼저다.
+        // 이메일만 아는 사람에게 계정이 탈퇴 상태라는 것이 드러나면 안 된다 (U2).
+        User user = user(1L);
+        user.withdraw(LocalDateTime.now().minusDays(29));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertLoginFailed(() -> authService.login(EMAIL, "Wrong123!"));
     }
 
     private User user(Long id) {

@@ -9,6 +9,7 @@ import com.ilog.ilog.user.dto.NicknameAvailabilityRequest;
 import com.ilog.ilog.user.dto.NicknameAvailabilityResponse;
 import com.ilog.ilog.user.dto.NicknameUpdateRequest;
 import com.ilog.ilog.user.dto.NicknameUpdateResponse;
+import com.ilog.ilog.user.dto.PasswordChangeRequest;
 import com.ilog.ilog.user.dto.PasswordVerificationRequest;
 import com.ilog.ilog.user.dto.PasswordVerificationResponse;
 import com.ilog.ilog.user.dto.SignupRequest;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -83,7 +85,7 @@ public class UserController {
     @ApiResponse(responseCode = "200", description = "비밀번호 일치. 개인정보를 돌려준다")
     @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(비밀번호 누락) 또는 `PASSWORD_MISMATCH`(비밀번호 불일치)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` / `TOKEN_EXPIRED` — 로그인 필요, 토큰 만료, 탈퇴 회원",
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 필요, 토큰 만료·위조, 탈퇴 회원",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 로그인 정보의 회원 번호로 회원을 찾을 수 없다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -98,7 +100,7 @@ public class UserController {
     @ApiResponse(responseCode = "200", description = "수정 성공. 프론트는 응답의 nickname 으로 헤더를 갱신한다")
     @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(길이·문자 규칙) 또는 `NICKNAME_UNCHANGED`(현재 닉네임과 같음)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` / `TOKEN_EXPIRED` — 로그인 필요, 토큰 만료, 탈퇴 회원",
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 필요, 토큰 만료·위조, 탈퇴 회원",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 로그인 정보의 회원 번호로 회원을 찾을 수 없다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -108,5 +110,27 @@ public class UserController {
     public NicknameUpdateResponse updateNickname(@Login LoginUser loginUser,
                                                  @Valid @RequestBody NicknameUpdateRequest request) {
         return userService.updateNickname(loginUser.userId(), request.nickname());
+    }
+
+    @Operation(summary = "비밀번호 변경 (MBR-07)",
+            description = """
+                    임시 비밀번호로 로그인한 상태에서도 쓴다. 그때는 현재 비밀번호가 임시 비밀번호다.
+
+                    성공해도 로그인은 유지된다(A7). 프론트는 토큰을 그대로 쓰면서 임시 비밀번호 상태만 해제한다.
+                    `newPasswordConfirm` 을 함께 보내도 서버는 무시한다. 확인값 일치는 프론트에서 검사한다.""")
+    @ApiResponse(responseCode = "204", description = "변경 성공")
+    @ApiResponse(responseCode = "400", description = """
+            `INVALID_INPUT`(누락) · `PASSWORD_MISMATCH`(현재 비밀번호 불일치) ·
+            `INVALID_PASSWORD_FORMAT`(새 비밀번호 형식) · `PASSWORD_REUSED`(최근 3개 재사용)""",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 필요, 토큰 만료·위조, 탈퇴 회원",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 로그인 정보의 회원 번호로 회원을 찾을 수 없다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PutMapping("/me/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(@Login LoginUser loginUser,
+                               @Valid @RequestBody PasswordChangeRequest request) {
+        userService.changePassword(loginUser.userId(), request.currentPassword(), request.newPassword());
     }
 }

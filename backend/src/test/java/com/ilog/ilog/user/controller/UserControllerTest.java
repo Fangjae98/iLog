@@ -1,6 +1,6 @@
 package com.ilog.ilog.user.controller;
 
-import com.ilog.ilog.global.config.SecurityConfig;
+import com.ilog.ilog.support.SecuredSliceTestSupport;
 import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
 import com.ilog.ilog.user.dto.EmailAvailabilityResponse;
@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -27,17 +27,19 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(UserController.class)
-@Import(SecurityConfig.class)
-class UserControllerTest {
+class UserControllerTest extends SecuredSliceTestSupport {
 
     @Autowired
     MockMvc mockMvc;
@@ -89,6 +91,21 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errors[?(@.field=='name')]").exists())
                 .andExpect(jsonPath("$.errors[?(@.field=='nickname')].reason")
                         .value("닉네임은 2~10자의 한글, 영문, 숫자만 가능합니다."));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void 영어_로케일로_요청해도_검증_문구는_한국어다() throws Exception {
+        // G2: spring.web.locale=ko + locale-resolver=fixed. @Email 은 message 를 지정하지 않아
+        // hibernate-validator 의 기본 문구를 쓰므로, 로케일 고정이 풀리면 영어로 새어 나간다.
+        mockMvc.perform(post("/api/v1/users")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"not-email","password":"Passw0rd!","name":"박기택","nickname":"기택"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field=='email')].reason")
+                        .value("올바른 형식의 이메일 주소여야 합니다"));
         verifyNoInteractions(userService);
     }
 
@@ -209,11 +226,12 @@ class UserControllerTest {
 
     @Test
     void 재확인에_성공하면_개인정보를_돌려준다() throws Exception {
+        // 나노초를 일부러 넣는다. G1 대로 소수점이 잘려야 아래 createdAt 단언이 통과한다 (JacksonDateTimeModule)
         when(userService.verifyPassword(1L, "Passw0rd!")).thenReturn(new PasswordVerificationResponse(
-                "user@example.com", "박기택", "기택", LocalDateTime.of(2026, 9, 16, 10, 0, 0), null));
+                "user@example.com", "박기택", "기택", LocalDateTime.of(2026, 9, 16, 10, 0, 0, 123_456_789), null));
 
         mockMvc.perform(post("/api/v1/users/me/password-verification")
-                        .header("X-User-Id", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"Passw0rd!\"}"))
                 .andExpect(status().isOk())
@@ -230,7 +248,7 @@ class UserControllerTest {
                 .thenThrow(new BusinessException(ErrorCode.PASSWORD_MISMATCH));
 
         mockMvc.perform(post("/api/v1/users/me/password-verification")
-                        .header("X-User-Id", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"Wrong0!pw\"}"))
                 .andExpect(status().isBadRequest())
@@ -240,7 +258,7 @@ class UserControllerTest {
     @Test
     void 재확인_비밀번호가_비어있으면_400() throws Exception {
         mockMvc.perform(post("/api/v1/users/me/password-verification")
-                        .header("X-User-Id", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -264,7 +282,7 @@ class UserControllerTest {
         when(userService.updateNickname(1L, "새닉네임")).thenReturn(new NicknameUpdateResponse(1L, "새닉네임"));
 
         mockMvc.perform(patch("/api/v1/users/me")
-                        .header("X-User-Id", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nickname\":\" 새닉네임 \"}"))
                 .andExpect(status().isOk())
@@ -277,7 +295,7 @@ class UserControllerTest {
         when(userService.updateNickname(1L, "새닉네임")).thenReturn(new NicknameUpdateResponse(1L, "새닉네임"));
 
         mockMvc.perform(patch("/api/v1/users/me")
-                        .header("X-User-Id", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nickname\":\"새닉네임\",\"email\":\"hack@x.com\",\"name\":\"해커\"}"))
                 .andExpect(status().isOk());
@@ -287,7 +305,7 @@ class UserControllerTest {
     @Test
     void 닉네임_규칙을_어기면_400() throws Exception {
         mockMvc.perform(patch("/api/v1/users/me")
-                        .header("X-User-Id", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nickname\":\"a\"}"))
                 .andExpect(status().isBadRequest())
@@ -304,11 +322,103 @@ class UserControllerTest {
 
         for (int[] expected : new int[][]{{400}, {409}}) {
             mockMvc.perform(patch("/api/v1/users/me")
-                            .header("X-User-Id", "1")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(1))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"nickname\":\"새닉네임\"}"))
                     .andExpect(status().is(expected[0]));
         }
+    }
+
+    // ---------- 비밀번호 변경 (MBR-07) ----------
+
+    @Test
+    void 비밀번호를_바꾸면_204이고_본문이_없다() throws Exception {
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Passw0rd!\",\"newPassword\":\"NewPassw0rd!\"}"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(userService).changePassword(1L, "Passw0rd!", "NewPassw0rd!");
+    }
+
+    @Test
+    void 비밀번호_변경은_newPasswordConfirm을_받아도_무시한다() throws Exception {
+        // 확인값 일치는 프론트가 검사한다. DTO 에 없어도 Boot 는 모르는 필드를 그냥 버린다.
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"Passw0rd!","newPassword":"NewPassw0rd!","newPasswordConfirm":"다른값"}"""))
+                .andExpect(status().isNoContent());
+
+        verify(userService).changePassword(1L, "Passw0rd!", "NewPassw0rd!");
+    }
+
+    @Test
+    void 로그인하지_않으면_비밀번호를_바꿀_수_없다() throws Exception {
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Passw0rd!\",\"newPassword\":\"NewPassw0rd!\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void 비밀번호_변경_비즈니스_예외는_모두_400이다() throws Exception {
+        // PASSWORD_MISMATCH 가 401 이 아닌 것이 중요하다. 401 이면 프론트가 로그아웃시킨다.
+        for (ErrorCode code : new ErrorCode[]{
+                ErrorCode.PASSWORD_MISMATCH, ErrorCode.INVALID_PASSWORD_FORMAT, ErrorCode.PASSWORD_REUSED}) {
+            doThrow(new BusinessException(code))
+                    .when(userService).changePassword(anyLong(), anyString(), anyString());
+
+            mockMvc.perform(put("/api/v1/users/me/password")
+                            .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"currentPassword\":\"Passw0rd!\",\"newPassword\":\"NewPassw0rd!\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value(code.name()));
+        }
+    }
+
+    @Test
+    void 비밀번호가_비어_있으면_400() throws Exception {
+        mockMvc.perform(put("/api/v1/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"\",\"newPassword\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.errors.length()").value(2));
+        verifyNoInteractions(userService);
+    }
+
+    // ---------- 공개 경로 (T08) ----------
+
+    @Test
+    void 공개_API는_무효한_토큰이_붙어도_막지_않는다() throws Exception {
+        // 프론트는 모든 요청에 토큰을 붙인다. 만료된 토큰 때문에 중복확인 같은
+        // 공개 API 까지 막히면 안 된다. (JwtAuthenticationFilterTest 의 테스트용 경로에서 옮겨 왔다)
+        when(userService.checkEmail("a@b.com")).thenReturn(EmailAvailabilityResponse.ofAvailable());
+
+        mockMvc.perform(get("/api/v1/users/email-availability")
+                        .param("email", "a@b.com")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer garbage.token.value"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(true));
+    }
+
+    @Test
+    void 회원가입은_토큰_없이_부른다() throws Exception {
+        when(userService.signup(any(SignupRequest.class))).thenReturn(1L);
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":"Passw0rd!","name":"박기택","nickname":"기택"}"""))
+                .andExpect(status().isCreated());
     }
 
     private void expectSignupError(String body, int status, String code) throws Exception {

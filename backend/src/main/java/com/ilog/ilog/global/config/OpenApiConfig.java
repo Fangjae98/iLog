@@ -2,17 +2,13 @@ package com.ilog.ilog.global.config;
 
 import com.ilog.ilog.global.auth.Login;
 import com.ilog.ilog.global.auth.LoginUser;
-import com.ilog.ilog.global.auth.LoginUserArgumentResolver;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
-import io.swagger.v3.oas.models.media.IntegerSchema;
-import io.swagger.v3.oas.models.parameters.HeaderParameter;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springdoc.core.utils.SpringDocUtils;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -51,26 +47,17 @@ public class OpenApiConfig {
     }
 
     /**
-     * 로그인이 필요한 API(= @Login 파라미터가 있는 메서드)에 인증 정보를 표시한다.
-     * JWT 적용 전(2단계)에는 개발용 헤더로도 호출할 수 있어서 헤더 입력칸을 함께 보여준다.
+     * 로그인이 필요한 API(= @Login 파라미터가 있는 메서드)에 자물쇠를 표시한다.
+     *
+     * <p>개발용 X-User-Id 헤더 입력칸은 T08 에서 없앴다. 인증 수단은 Bearer 토큰 하나뿐이다.
      */
     @Bean
-    public OperationCustomizer loginOperationCustomizer(
-            @Value("${ilog.auth.dev-header-enabled:false}") boolean devHeaderEnabled) {
+    public OperationCustomizer loginOperationCustomizer() {
         return (operation, handlerMethod) -> {
             boolean loginRequired = Arrays.stream(handlerMethod.getMethodParameters())
                     .anyMatch(parameter -> parameter.hasParameterAnnotation(Login.class));
-            if (!loginRequired) {
-                return operation;
-            }
-            operation.addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME));
-            if (devHeaderEnabled) {
-                operation.addParametersItem(new HeaderParameter()
-                        .name(LoginUserArgumentResolver.DEV_HEADER)
-                        .description("[개발용] JWT 적용 전에는 이 헤더의 회원 ID 로 로그인한 것으로 처리한다. "
-                                + "JWT 적용 후 ilog.auth.dev-header-enabled=false 로 끄면 사라진다.")
-                        .required(false)
-                        .schema(new IntegerSchema().format("int64").example(1)));
+            if (loginRequired) {
+                operation.addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME));
             }
             return operation;
         };

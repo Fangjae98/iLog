@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Locale;
 
 @Service
@@ -24,6 +25,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordHistoryService passwordHistoryService;
 
     /**
      * 회원가입 (MBR-01).
@@ -47,14 +49,24 @@ public class UserService {
                 .name(request.name())
                 .nickname(request.nickname())
                 .build();
+        User saved;
         try {
-            return userRepository.saveAndFlush(user).getId();
+            saved = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
             // 사전 검사와 저장 사이에 같은 값이 먼저 들어간 경우. 유니크 제약이 최종 방어선이다.
             validateEmailNotTaken(email);
             validateNicknameNotTaken(request.nickname());
             throw e;
         }
+
+        // 반드시 try 밖에서, 저장 성공 뒤에 부른다 (U7).
+        //  - FK 가 회원 행을 요구하므로 insert 뒤여야 한다.
+        //  - try 안에 두면 이력 저장 실패가 위 catch 로 들어가, 중복이 아닌데
+        //    중복 이메일/닉네임이라고 잘못 보고하게 된다.
+        // 가입과 이력을 묶는 트랜잭션은 없다. 그 사이에 죽으면 이력 행이 비는데,
+        // isReused 가 현재 해시도 함께 보므로 현재 비밀번호 재사용 구멍은 생기지 않는다.
+        passwordHistoryService.record(saved.getId(), saved.getPassword());
+        return saved.getId();
     }
 
     /** 이메일 사용 가능 확인 (MBR-02). 탈퇴 후 30일 이내 계정은 WITHDRAWN 으로 구분한다. */
@@ -81,6 +93,54 @@ public class UserService {
             throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
         return PasswordVerificationResponse.from(user);
+    }
+
+    /**
+     * 비밀번호 변경 (MBR-07).
+     *
+     * <p>아래 순서가 곧 정책이다 (지시서 T06).
+     * <ol>
+     *   <li>현재 비밀번호 불일치 → {@code PASSWORD_MISMATCH}. <b>400 이다</b>.
+     *       401 로 하면 프론트가 로그인 만료로 보고 변경 도중에 로그아웃시킨다</li>
+     *   <li>새 비밀번호 형식 위반 → {@code INVALID_PASSWORD_FORMAT}</li>
+     *   <li>최근 3개(현재 포함) 재사용 → {@code PASSWORD_REUSED}</li>
+     *   <li>해시 교체. {@code changePassword} 가 임시 비밀번호 상태도 함께 푼다</li>
+     *   <li>이력 저장</li>
+     * </ol>
+     *
+     * <p>임시 비밀번호로 로그인한 상태에서도 이 API 를 쓴다. 그때는 현재 비밀번호 = 임시 비밀번호다.
+     * 성공해도 토큰은 그대로 쓴다 (A7). 기존 토큰의 {@code tmp=true} 는 만료까지 남지만
+     * 서버는 그것으로 아무것도 막지 않는다 (A8).
+     */
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = getActiveUser(userId);
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
+        }
+        if (!UserPolicy.isValidPassword(newPassword)) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD_FORMAT);
+        }
+        if (passwordHistoryService.isReused(userId, user.getPassword(), newPassword)) {
+            throw new BusinessException(ErrorCode.PASSWORD_REUSED);
+        }
+
+        user.changePassword(passwordEncoder.encode(newPassword));
+        passwordHistoryService.record(userId, user.getPassword());
+    }
+
+    /**
+     * 임시 비밀번호로 교체한다 (AUTH-03).
+     *
+     * <p>메일 발송이 끝난 뒤에만 불러야 한다. 발송 전에 부르면 사용자가 받지 못한
+     * 비밀번호로 계정이 잠긴다. 호출 순서는 {@code TemporaryPasswordService} 가 지킨다.
+     *
+     * <p>임시 비밀번호는 {@code password_history} 에 넣지 않는다 (U7).
+     */
+    @Transactional
+    public void issueTempPassword(Long userId, String encodedTempPassword, LocalDateTime expiresAt) {
+        getActiveUser(userId).issueTempPassword(encodedTempPassword, expiresAt);
     }
 
     /** 닉네임 수정 (MBR-06). */

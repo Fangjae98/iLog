@@ -15,4 +15,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 가입·닉네임 변경 시 USER_DUPLICATE_NICKNAME 판정. */
     boolean existsByNickname(String nickname);
+
+    /**
+     * 임시 비밀번호 발급 대상 조회 (AUTH-03, U8).
+     * 탈퇴 회원은 제외한다 — 못 찾은 것과 같은 404 로 응답해 계정 상태를 드러내지 않는다.
+     */
+    Optional<User> findByEmailAndNameAndWithdrawnAtIsNull(String email, String name);
+
+    /**
+     * 탈퇴 회원의 남은 토큰을 막기 위한 확인 (A6, T08-3).
+     * 인증된 요청마다 부르므로 엔티티를 싣지 않는 exists 로 둔다.
+     */
+    boolean existsByIdAndWithdrawnAtIsNull(Long id);
 }
