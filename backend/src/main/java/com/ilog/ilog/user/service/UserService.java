@@ -94,6 +94,41 @@ public class UserService {
         return PasswordVerificationResponse.from(user);
     }
 
+    /**
+     * 비밀번호 변경 (MBR-07).
+     *
+     * <p>아래 순서가 곧 정책이다 (지시서 T06).
+     * <ol>
+     *   <li>현재 비밀번호 불일치 → {@code PASSWORD_MISMATCH}. <b>400 이다</b>.
+     *       401 로 하면 프론트가 로그인 만료로 보고 변경 도중에 로그아웃시킨다</li>
+     *   <li>새 비밀번호 형식 위반 → {@code INVALID_PASSWORD_FORMAT}</li>
+     *   <li>최근 3개(현재 포함) 재사용 → {@code PASSWORD_REUSED}</li>
+     *   <li>해시 교체. {@code changePassword} 가 임시 비밀번호 상태도 함께 푼다</li>
+     *   <li>이력 저장</li>
+     * </ol>
+     *
+     * <p>임시 비밀번호로 로그인한 상태에서도 이 API 를 쓴다. 그때는 현재 비밀번호 = 임시 비밀번호다.
+     * 성공해도 토큰은 그대로 쓴다 (A7). 기존 토큰의 {@code tmp=true} 는 만료까지 남지만
+     * 서버는 그것으로 아무것도 막지 않는다 (A8).
+     */
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = getActiveUser(userId);
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
+        }
+        if (!UserPolicy.isValidPassword(newPassword)) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD_FORMAT);
+        }
+        if (passwordHistoryService.isReused(userId, user.getPassword(), newPassword)) {
+            throw new BusinessException(ErrorCode.PASSWORD_REUSED);
+        }
+
+        user.changePassword(passwordEncoder.encode(newPassword));
+        passwordHistoryService.record(userId, user.getPassword());
+    }
+
     /** 닉네임 수정 (MBR-06). */
     @Transactional
     public NicknameUpdateResponse updateNickname(Long userId, String nickname) {

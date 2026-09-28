@@ -67,13 +67,27 @@ class OpenApiDocsTest {
     }
 
     @Test
-    void 회원_API_5개가_문서에_나온다() throws Exception {
+    void 회원_API_6개가_문서에_나온다() throws Exception {
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/api/v1/users'].post.summary").value("회원가입 (MBR-01)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/email-availability'].get.summary").value("이메일 사용 가능 확인 (MBR-02)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/nickname-availability'].get.summary").value("닉네임 사용 가능 확인 (MBR-03)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/me/password-verification'].post.summary").value("비밀번호 재확인 + 개인정보 조회 (MBR-05)"))
-                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.summary").value("닉네임 수정 (MBR-06)"));
+                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.summary").value("닉네임 수정 (MBR-06)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/password'].put.summary").value("비밀번호 변경 (MBR-07)"));
+    }
+
+    @Test
+    void 비밀번호_변경은_인증이_필요하고_확인값_필드는_문서에_없다() throws Exception {
+        String changePassword = "$.paths['/api/v1/users/me/password'].put";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(changePassword + ".security[0].bearerAuth").exists())
+                .andExpect(jsonPath(changePassword + ".responses['204']").exists())
+                // newPasswordConfirm 은 프론트 전용이라 서버 DTO 에 없다
+                .andExpect(jsonPath("$.components.schemas.PasswordChangeRequest.properties.newPasswordConfirm").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.PasswordChangeRequest.properties.currentPassword.format").value("password"))
+                .andExpect(jsonPath("$.components.schemas.PasswordChangeRequest.properties.newPassword.format").value("password"));
     }
 
     @Test

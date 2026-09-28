@@ -27,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -304,6 +305,72 @@ class UserServiceTest {
     }
 
     // ---------- helpers ----------
+
+    // ---------- 비밀번호 변경 (MBR-07) ----------
+
+    @Test
+    void 비밀번호를_바꾸면_해시가_교체되고_이력을_남긴다() {
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.changePassword(1L, RAW_PASSWORD, "NewPassw0rd!");
+
+        assertThat(passwordEncoder.matches("NewPassw0rd!", user.getPassword())).isTrue();
+        assertThat(user.isTempPassword()).isFalse();
+        verify(passwordHistoryService).record(1L, user.getPassword());
+    }
+
+    @Test
+    void 현재_비밀번호가_틀리면_PASSWORD_MISMATCH_이고_400이다() {
+        // 401 이면 프론트가 로그인 만료로 보고 변경 도중에 로그아웃시킨다
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertBusiness(() -> userService.changePassword(1L, "Wrong123!", "NewPassw0rd!"),
+                ErrorCode.PASSWORD_MISMATCH);
+        assertThat(ErrorCode.PASSWORD_MISMATCH.getStatus().value()).isEqualTo(400);
+        verifyNoInteractions(passwordHistoryService);
+    }
+
+    @Test
+    void 새_비밀번호_형식이_틀리면_INVALID_PASSWORD_FORMAT() {
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertBusiness(() -> userService.changePassword(1L, RAW_PASSWORD, "weak"),
+                ErrorCode.INVALID_PASSWORD_FORMAT);
+    }
+
+    @Test
+    void 최근_비밀번호를_다시_쓰면_PASSWORD_REUSED() {
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordHistoryService.isReused(eq(1L), anyString(), eq("NewPassw0rd!"))).thenReturn(true);
+
+        assertBusiness(() -> userService.changePassword(1L, RAW_PASSWORD, "NewPassw0rd!"),
+                ErrorCode.PASSWORD_REUSED);
+        verify(passwordHistoryService, never()).record(any(), any());
+    }
+
+    @Test
+    void 현재_비밀번호_검사가_새_비밀번호_형식_검사보다_먼저다() {
+        // 둘 다 틀렸을 때 어느 쪽을 알려 주는지가 정책이다 (지시서 T06 처리 순서)
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertBusiness(() -> userService.changePassword(1L, "Wrong123!", "weak"),
+                ErrorCode.PASSWORD_MISMATCH);
+    }
+
+    @Test
+    void 탈퇴_회원은_비밀번호를_바꿀_수_없다() {
+        User user = activeUser(1L, "a@b.com", "기택");
+        user.withdraw(java.time.LocalDateTime.now());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertBusiness(() -> userService.changePassword(1L, RAW_PASSWORD, "NewPassw0rd!"),
+                ErrorCode.UNAUTHORIZED);
+    }
 
     private User activeUser(Long id, String email, String nickname) {
         User user = User.builder()
