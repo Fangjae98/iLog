@@ -57,19 +57,38 @@ async function onLogout() {
   router.replace({ name: 'login' })
 }
 
+function goToServiceRoute(name) {
+  if (router.hasRoute(name)) router.replace({ name })
+}
+
+function onCancel() {
+  goToServiceRoute(router.hasRoute('mypage') ? 'mypage' : 'post-list')
+}
+
 async function onSubmit() {
   formError.value = ''
   fieldErrors.value = {}
   if (!validate()) return
 
+  // 강제 변경이 아닌 일반 변경은 사용자가 취소할 수 있도록 한 번 더 확인한다.
+  if (!forced.value) {
+    const confirmed = await dialog.confirm({
+      title: '비밀번호를 변경하시겠습니까?',
+      confirmText: '변경하기',
+    })
+    if (!confirmed) return
+  }
+
   submitting.value = true
   try {
     await authApi.changePassword({ ...form })
+    const wasForced = forced.value
     auth.markPasswordChanged()
     form.currentPassword = ''
     form.newPassword = ''
     form.newPasswordConfirm = ''
     await dialog.alert({ title: '비밀번호가 성공적으로 변경되었습니다.' })
+    goToServiceRoute(wasForced ? 'post-list' : 'mypage')
   } catch (error) {
     // 현재 비밀번호 불일치는 인증 만료가 아니므로 로그인 세션을 유지합니다.
     formError.value = error.message
@@ -136,6 +155,7 @@ async function onSubmit() {
         {{ submitting ? '변경 중' : '비밀번호 변경하기' }}
       </button>
       <button v-if="forced" type="button" class="btn" @click="onLogout">로그아웃</button>
+      <button v-else type="button" class="btn" @click="onCancel">취소</button>
     </div>
   </form>
 </template>
