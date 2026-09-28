@@ -37,12 +37,12 @@ export const useAuthStore = defineStore('auth', {
       return data
     },
 
-    // 로그아웃 API를 호출하고, 성공/실패와 상관없이 토큰·유저정보·비밀번호 강제변경 여부를 삭제
+    // Mock 로그인 상태를 정리한 뒤 토큰·유저정보·브라우저 세션을 삭제
     async logout() {
       try {
-        await authApi.logout() // 로그아웃 API 존치 여부 미결 — 실패해도 아래는 실행
+        await authApi.logout()
       } catch {
-        // 서버 로그아웃에 실패해도 무시
+        // Mock 상태 정리에 실패해도 프론트 세션은 삭제
       } finally {
         this.clear()
       }
