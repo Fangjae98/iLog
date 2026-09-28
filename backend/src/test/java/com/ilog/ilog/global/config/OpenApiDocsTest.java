@@ -2,6 +2,7 @@ package com.ilog.ilog.global.config;
 
 import com.ilog.ilog.auth.controller.AuthController;
 import com.ilog.ilog.auth.service.AuthService;
+import com.ilog.ilog.auth.service.TemporaryPasswordService;
 import com.ilog.ilog.post.controller.PostController;
 import com.ilog.ilog.post.service.PostService;
 import com.ilog.ilog.user.controller.UserController;
@@ -52,6 +53,9 @@ class OpenApiDocsTest {
 
     @MockitoBean
     AuthService authService;
+
+    @MockitoBean
+    TemporaryPasswordService temporaryPasswordService;
 
     @Test
     void 문서_정보() throws Exception {

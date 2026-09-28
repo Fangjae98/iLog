@@ -24,6 +24,15 @@ public final class UserPolicy {
      */
     public static final int PASSWORD_HISTORY_LIMIT = 3;
 
+    /** 비밀번호에 쓸 수 있는 특수문자. 아래 PASSWORD 정규식과 같은 집합이어야 한다. */
+    public static final String PASSWORD_SPECIAL_CHARACTERS = "!@#$%^&*";
+
+    /** 임시 비밀번호 길이 (AUTH-03). PASSWORD 정규식의 8~20자 범위 안에 있어야 한다. */
+    public static final int TEMP_PASSWORD_LENGTH = 12;
+
+    /** 임시 비밀번호 유효 기간 (U6, D-12). */
+    public static final int TEMP_PASSWORD_VALIDITY_HOURS = 24;
+
     /** 8~20자, 영문·숫자·특수문자(!@#$%^&*) 각 1개 이상. */
     private static final Pattern PASSWORD = Pattern.compile(
             "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,20}$");

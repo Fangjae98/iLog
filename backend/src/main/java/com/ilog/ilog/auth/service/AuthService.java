@@ -31,7 +31,7 @@ public class AuthService {
      *   <li>없는 이메일 → {@code LOGIN_FAILED}</li>
      *   <li>비밀번호 불일치 → {@code LOGIN_FAILED}. 1번과 구분하지 않는다</li>
      *   <li>탈퇴 30일 이내 → {@code USER_WITHDRAWN}(403) / 30일 경과 → {@code LOGIN_FAILED}</li>
-     *   <li>(T07) 임시 비밀번호 만료 → {@code TEMP_PASSWORD_EXPIRED}</li>
+     *   <li>임시 비밀번호 만료(24시간, U6) → {@code TEMP_PASSWORD_EXPIRED}(401)</li>
      *   <li>토큰 발급</li>
      * </ol>
      *
@@ -49,12 +49,19 @@ public class AuthService {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
+        LocalDateTime now = LocalDateTime.now();
+
         if (user.isWithdrawn()) {
             boolean recoverable = user.getWithdrawnAt()
                     .plusDays(UserPolicy.WITHDRAWAL_RECOVERY_DAYS)
-                    .isAfter(LocalDateTime.now());
+                    .isAfter(now);
             // 복구 기간이 지났으면 곧 물리 삭제될 계정이라 존재를 알리지 않는다
             throw new BusinessException(recoverable ? ErrorCode.USER_WITHDRAWN : ErrorCode.LOGIN_FAILED);
+        }
+
+        // 임시 비밀번호는 24시간만 유효하다 (U6). 만료되면 다시 발급받아야 한다.
+        if (user.isTempPasswordExpired(now)) {
+            throw new BusinessException(ErrorCode.TEMP_PASSWORD_EXPIRED);
         }
 
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.isTempPassword());

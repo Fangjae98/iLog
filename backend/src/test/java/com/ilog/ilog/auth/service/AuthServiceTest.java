@@ -63,7 +63,7 @@ class AuthServiceTest {
     @Test
     void 임시_비밀번호로_로그인하면_비밀번호_변경이_필요하다고_알린다() {
         User user = user(1L);
-        user.issueTempPassword(passwordEncoder.encode("Temp1234!"));
+        user.issueTempPassword(passwordEncoder.encode("Temp1234!"), LocalDateTime.now().plusHours(1));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         LoginResponse response = authService.login(EMAIL, "Temp1234!");
@@ -93,6 +93,18 @@ class AuthServiceTest {
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(1L)));
 
         assertLoginFailed(() -> authService.login(EMAIL, "Wrong123!"));
+    }
+
+    @Test
+    void 임시_비밀번호가_만료됐으면_TEMP_PASSWORD_EXPIRED() {
+        // U6: 발급 후 24시간. 만료되면 다시 발급받아야 한다.
+        User user = user(1L);
+        user.issueTempPassword(passwordEncoder.encode("Temp1234!"), LocalDateTime.now().minusMinutes(1));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login(EMAIL, "Temp1234!"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TEMP_PASSWORD_EXPIRED));
     }
 
     /**

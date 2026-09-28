@@ -1,7 +1,9 @@
 package com.ilog.ilog.auth.controller;
 
 import com.ilog.ilog.auth.dto.LoginResponse;
+import com.ilog.ilog.auth.dto.TemporaryPasswordResponse;
 import com.ilog.ilog.auth.service.AuthService;
+import com.ilog.ilog.auth.service.TemporaryPasswordService;
 import com.ilog.ilog.global.auth.jwt.JwtTokenProvider;
 import com.ilog.ilog.global.config.SecurityConfig;
 import com.ilog.ilog.global.error.BusinessException;
@@ -40,6 +42,9 @@ class AuthControllerTest {
 
     @MockitoBean
     AuthService authService;
+
+    @MockitoBean
+    TemporaryPasswordService temporaryPasswordService;
 
     @Test
     void 로그인하면_200과_토큰_회원정보() throws Exception {
@@ -130,6 +135,71 @@ class AuthControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer garbage.token.value"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    // ---------- 임시 비밀번호 발급 (AUTH-03) ----------
+
+    @Test
+    void 임시_비밀번호를_발급하면_가려진_이메일을_돌려준다() throws Exception {
+        when(temporaryPasswordService.issue("user@example.com", "박기택"))
+                .thenReturn(TemporaryPasswordResponse.of("user@example.com"));
+
+        mockMvc.perform(post("/api/v1/auth/temporary-passwords")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","name":"박기택"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("u***@example.com"));
+    }
+
+    @Test
+    void 임시_비밀번호_발급은_로그인_없이_부른다() throws Exception {
+        when(temporaryPasswordService.issue(anyString(), anyString()))
+                .thenReturn(TemporaryPasswordResponse.of("user@example.com"));
+
+        mockMvc.perform(post("/api/v1/auth/temporary-passwords")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","name":"박기택"}"""))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 이메일이나_이름이_맞지_않으면_404() throws Exception {
+        when(temporaryPasswordService.issue(anyString(), anyString()))
+                .thenThrow(new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        mockMvc.perform(post("/api/v1/auth/temporary-passwords")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","name":"없는이름"}"""))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
+    }
+
+    @Test
+    void 메일_발송에_실패하면_500_MAIL_SEND_FAILED() throws Exception {
+        when(temporaryPasswordService.issue(anyString(), anyString()))
+                .thenThrow(new BusinessException(ErrorCode.MAIL_SEND_FAILED));
+
+        mockMvc.perform(post("/api/v1/auth/temporary-passwords")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","name":"박기택"}"""))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("MAIL_SEND_FAILED"));
+    }
+
+    @Test
+    void 임시_비밀번호_발급에_이메일_형식이_틀리면_400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/temporary-passwords")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"not-email","name":""}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.errors.length()").value(2));
+        verifyNoInteractions(temporaryPasswordService);
     }
 
     @Test

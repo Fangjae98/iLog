@@ -57,6 +57,10 @@ public class User extends BaseTimeEntity {
     @Column(name = "temp_password", nullable = false)
     private boolean tempPassword;
 
+    /** 임시 비밀번호 만료 시각 (U6, 발급 후 24시간). 임시 비밀번호 상태가 아니면 null. */
+    @Column(name = "temp_password_expires_at")
+    private LocalDateTime tempPasswordExpiresAt;
+
     /** 탈퇴 시각. null 이면 활성 회원. USER_WITHDRAWN / REJOIN_RESTRICTED 판정에 사용. */
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
@@ -82,11 +86,22 @@ public class User extends BaseTimeEntity {
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
         this.tempPassword = false;
+        this.tempPasswordExpiresAt = null;
     }
 
-    public void issueTempPassword(String encodedTempPassword) {
+    /**
+     * 임시 비밀번호로 교체한다 (AUTH-03).
+     * 만료 시각을 함께 받는다 (U6: 발급 후 24시간). 만료 검사는 로그인에서 한다.
+     */
+    public void issueTempPassword(String encodedTempPassword, LocalDateTime expiresAt) {
         this.password = encodedTempPassword;
         this.tempPassword = true;
+        this.tempPasswordExpiresAt = expiresAt;
+    }
+
+    /** 임시 비밀번호 상태이면서 만료 시각이 지났는지 (U6). */
+    public boolean isTempPasswordExpired(LocalDateTime now) {
+        return tempPassword && tempPasswordExpiresAt != null && tempPasswordExpiresAt.isBefore(now);
     }
 
     public void withdraw(LocalDateTime withdrawnAt) {

@@ -2,7 +2,10 @@ package com.ilog.ilog.auth.controller;
 
 import com.ilog.ilog.auth.dto.LoginRequest;
 import com.ilog.ilog.auth.dto.LoginResponse;
+import com.ilog.ilog.auth.dto.TemporaryPasswordRequest;
+import com.ilog.ilog.auth.dto.TemporaryPasswordResponse;
 import com.ilog.ilog.auth.service.AuthService;
+import com.ilog.ilog.auth.service.TemporaryPasswordService;
 import com.ilog.ilog.global.auth.Login;
 import com.ilog.ilog.global.auth.LoginUser;
 import com.ilog.ilog.global.error.ErrorResponse;
@@ -28,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final TemporaryPasswordService temporaryPasswordService;
 
     @Operation(summary = "로그인 (토큰 발급)",
             description = """
@@ -63,5 +67,25 @@ public class AuthController {
         //  - T08 로 permitAll 을 풀기 전에는 이 파라미터가 "토큰 없음 → 401" 을 만드는 유일한 장치다
         //    (LoginUserArgumentResolver 가 인증 정보를 못 찾으면 UNAUTHORIZED 를 던진다).
         //  - OpenApiConfig 가 @Login 파라미터 유무로 Swagger 에 자물쇠를 붙인다.
+    }
+
+    @Operation(summary = "임시 비밀번호 발급 (AUTH-03)",
+            description = """
+                    이메일과 이름이 모두 맞는 회원에게 임시 비밀번호를 메일로 보낸다. 로그인 없이 호출한다.
+
+                    메일 발송에 성공한 뒤에만 비밀번호가 바뀐다. 발송에 실패하면 기존 비밀번호가 그대로 남는다.
+                    임시 비밀번호는 24시간 동안만 쓸 수 있고(U6), 만료 후 로그인하면 401 `TEMP_PASSWORD_EXPIRED` 다.
+                    응답의 이메일은 가려서 내려준다(예: `p***@gmail.com`).""")
+    @ApiResponse(responseCode = "200", description = "발송 성공. 가려진 수신 이메일을 돌려준다")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — 이메일 형식·이름 누락",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 이메일·이름이 맞는 회원이 없음 (탈퇴 회원 포함)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "500", description = "`MAIL_SEND_FAILED` — 메일 발송 실패. 기존 비밀번호는 그대로다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/temporary-passwords")
+    public TemporaryPasswordResponse issueTemporaryPassword(
+            @Valid @RequestBody TemporaryPasswordRequest request) {
+        return temporaryPasswordService.issue(request.email(), request.name());
     }
 }

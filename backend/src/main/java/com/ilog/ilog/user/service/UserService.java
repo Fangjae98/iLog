@@ -16,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Locale;
 
 @Service
@@ -127,6 +128,19 @@ public class UserService {
 
         user.changePassword(passwordEncoder.encode(newPassword));
         passwordHistoryService.record(userId, user.getPassword());
+    }
+
+    /**
+     * 임시 비밀번호로 교체한다 (AUTH-03).
+     *
+     * <p>메일 발송이 끝난 뒤에만 불러야 한다. 발송 전에 부르면 사용자가 받지 못한
+     * 비밀번호로 계정이 잠긴다. 호출 순서는 {@code TemporaryPasswordService} 가 지킨다.
+     *
+     * <p>임시 비밀번호는 {@code password_history} 에 넣지 않는다 (U7).
+     */
+    @Transactional
+    public void issueTempPassword(Long userId, String encodedTempPassword, LocalDateTime expiresAt) {
+        getActiveUser(userId).issueTempPassword(encodedTempPassword, expiresAt);
     }
 
     /** 닉네임 수정 (MBR-06). */

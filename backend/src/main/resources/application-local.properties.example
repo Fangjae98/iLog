@@ -30,3 +30,9 @@ spring.jpa.show-sql=true
 # 먼저 로컬 PostgreSQL 을 중지해 보고, 그럴 수 없을 때만
 # docker-compose.yml 의 포트를 "5433:5432" 로 바꾸고 위 url 도 5433 으로 맞추세요.
 # 이때도 실제로 붙는 DB 는 컨테이너의 16 이어야 합니다.
+
+# 임시 비밀번호 안내 메일 (AUTH-03). Gmail 앱 비밀번호(16자)를 씁니다.
+#   발급: Google 계정 -> 보안 -> 2단계 인증 -> 앱 비밀번호
+# 비워 두어도 서버는 뜹니다. 임시 비밀번호 발급만 500 MAIL_SEND_FAILED 로 실패합니다.
+#spring.mail.username=your_gmail_address
+#spring.mail.password=your_app_password
