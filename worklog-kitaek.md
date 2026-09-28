@@ -450,7 +450,7 @@ cd backend && ./gradlew --stop && ./gradlew clean build
 작업자: kitaek
 브랜치: `feat/be/auth-complete` (base: `be` 최신 `5e99b38`)
 기준 문서: `ilog-backend-work-order.md` (지시서), `CLAUDE.md` (규칙) — 둘 다 커밋하지 않고 로컬 참조용
-상태: 커밋 7개. 테스트 **215개 통과 / 실패 0 / 건너뜀 5** (건너뜀은 전부 Docker 미실행)
+상태: 커밋 9개. 테스트 **215개 전부 통과** (Docker 켜고 DB 테스트까지 실행 확인)
 
 시작 시점 기준선은 115개 중 1개 실패였습니다. 실패는 `IlogApplicationTests`가
 로컬 DB를 요구하던 것이고, T02-5에서 Testcontainers로 옮겨 해소됐습니다.
@@ -475,6 +475,7 @@ cd backend && ./gradlew --stop && ./gradlew clean build
 | T06 | `7d2a579` | 비밀번호 변경 `PUT /users/me/password` |
 | T07 | `c68d9bb` | 임시 비밀번호 발급 + Gmail 메일 |
 | T08 | `3a393dd` | `permitAll` 해제, `X-User-Id` 제거 |
+| T02-5 수정 | `cb4fbb9` | DB 테스트 컨테이너 싱글턴 전환 (아래 참조) |
 
 ### 막힐 뻔한 것 3가지
 
@@ -528,16 +529,39 @@ Boot 4는 Jackson 3(`tools.jackson`)입니다. 그 설정은 `SimpleDateFormat`�
 - `공개_API는_무효한_토큰이_붙어도_막지_않는다` — 테스트용 경로가 더 이상 공개가 아님.
   의도는 실제 공개 경로(`GET /users/email-availability`)로 옮겼습니다.
 
-### 확인하지 못한 것
+### DB 테스트를 돌려 보니 4개가 깨졌습니다 (커밋 `cb4fbb9`)
 
-**로컬에 Docker가 떠 있지 않아 DB 테스트 5개를 돌리지 못했습니다** (실패가 아니라 skip).
-코드는 썼지만 실행된 적이 없습니다. Docker를 띄우고 `./gradlew test`를 다시 돌려야 합니다.
+처음에는 Docker가 꺼져 있어 DB 테스트 5개가 skip된 채로 "215개 통과"였습니다.
+Docker를 띄우고 다시 돌리니 `PasswordHistoryServiceTest` 4개가 전부
+**`localhost:57868 연결 거부`**로 실패했습니다.
+
+원인은 **Testcontainers와 Spring 컨텍스트 캐싱의 충돌**입니다.
+`@Container`는 테스트 클래스마다 컨테이너를 시작하고 **종료**하는데, Spring은
+같은 설정의 컨텍스트를 캐시해 재사용합니다. 먼저 끝난 `IlogApplicationTests`가
+컨테이너를 내리면 캐시된 컨텍스트가 죽은 포트를 계속 가리켜 다음 클래스가 죽습니다.
+
+`@Container`를 떼고 static 초기화에서 한 번만 `start()` 하는 싱글턴으로 바꿨습니다.
+JVM당 컨테이너 하나를 공유하고 내리지 않으며, 정리는 Ryuk이 맡습니다.
+`start()` 전에 `DockerClientFactory.isDockerAvailable()`을 확인하는데,
+이게 없으면 Docker 없는 환경에서 skip 대신 `ExceptionInInitializerError`가 납니다.
+
+> **교훈**: skip은 통과가 아닙니다. 처음의 "215개 통과 / 5개 skip"은 DB 코드가
+> 한 번도 실행되지 않은 상태였고, 실제로 돌리자 바로 깨졌습니다.
+
+### 검증한 것
+
+| 항목 | 결과 |
+|---|---|
+| Docker 켠 상태 전체 테스트 | **215개 통과 / 실패 0 / 건너뜀 0** — DB 테스트 5개가 실제 `postgres:16`에서 실행됨 |
+| `PasswordHistoryServiceTest` 4개 (T05 완료 기준) | **통과** — 이력 1건, 최신 3건만 남김, 재사용 판정, 한도 밖 재사용 허용 |
+| `IlogApplicationTests.contextLoads` | **통과** |
+| Docker 끈 상태 (T02-5 완료 기준) | **5개 skip, 실패 0, 빌드 성공** — 오류가 아니라 건너뜀임을 확인 |
+
+### 아직 확인하지 못한 것
 
 | 항목 | 상태 |
 |---|---|
-| `PasswordHistoryServiceTest` 4개 (이력 1건, 최신 3건만 남김, 재사용 판정) | **미확인** |
-| `IlogApplicationTests.contextLoads` | **미확인** |
-| 실제 메일 발송 (Gmail 앱 비밀번호 필요) | **미확인** — 목으로만 검증 |
+| 실제 메일 발송 (Gmail 앱 비밀번호 필요) | **미확인** — `JavaMailSender` 목으로만 검증 |
 | Swagger에서 로그인 → 토큰으로 게시글 API 수동 확인 | **미확인** |
 | `PUT /users/me/password` 성공 후 새 비번으로 로그인 (엔드투엔드) | **미확인** — 단위로만 검증 |
 
