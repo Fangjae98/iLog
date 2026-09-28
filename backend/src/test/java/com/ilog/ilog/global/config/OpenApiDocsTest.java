@@ -234,6 +234,19 @@ class OpenApiDocsTest {
     }
 
     @Test
+    void 로그아웃_API는_같은_경로의_DELETE이고_인증이_필요하다() throws Exception {
+        // 같은 /auth/tokens 를 POST(공개) 와 DELETE(인증) 가 나눠 쓴다. T08 의 매처도 메서드 단위여야 한다.
+        String logout = "$.paths['/api/v1/auth/tokens'].delete";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(logout + ".summary").value("로그아웃 (AUTH-02)"))
+                .andExpect(jsonPath(logout + ".security[0].bearerAuth").exists())
+                .andExpect(jsonPath(logout + ".responses['204']").exists())
+                .andExpect(jsonPath(logout + ".responses['401'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"));
+    }
+
+    @Test
     void Swagger_UI_페이지가_열린다() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
                 .andExpect(status().isOk());

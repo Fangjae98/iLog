@@ -3,6 +3,8 @@ package com.ilog.ilog.auth.controller;
 import com.ilog.ilog.auth.dto.LoginRequest;
 import com.ilog.ilog.auth.dto.LoginResponse;
 import com.ilog.ilog.auth.service.AuthService;
+import com.ilog.ilog.global.auth.Login;
+import com.ilog.ilog.global.auth.LoginUser;
 import com.ilog.ilog.global.error.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -11,9 +13,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Auth", description = "인증")
@@ -39,5 +44,22 @@ public class AuthController {
     @PostMapping("/tokens")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request.email(), request.password());
+    }
+
+    @Operation(summary = "로그아웃 (AUTH-02)",
+            description = """
+                    서버는 아무것도 저장하지 않고 204 만 돌려준다 (A4).
+                    토큰 저장소(블랙리스트)가 없는 구조라, 실제 로그아웃은 프론트가 토큰을 지우는 것이다.
+                    발급된 토큰은 만료까지 유효하다.""")
+    @ApiResponse(responseCode = "204", description = "로그아웃 처리됨")
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 토큰 없음·위조·만료, 탈퇴 회원",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @DeleteMapping("/tokens")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@Login LoginUser loginUser) {
+        // loginUser 를 쓰지 않지만 지우면 안 된다.
+        //  - T08 로 permitAll 을 풀기 전에는 이 파라미터가 "토큰 없음 → 401" 을 만드는 유일한 장치다
+        //    (LoginUserArgumentResolver 가 인증 정보를 못 찾으면 UNAUTHORIZED 를 던진다).
+        //  - OpenApiConfig 가 @Login 파라미터 유무로 Swagger 에 자물쇠를 붙인다.
     }
 }
