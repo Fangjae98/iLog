@@ -39,7 +39,9 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "로그인 성공")
     @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — 이메일·비밀번호 누락",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "401", description = "`LOGIN_FAILED` — 없는 이메일, 틀린 비밀번호, 탈퇴 회원 (구분하지 않는다)",
+    @ApiResponse(responseCode = "401", description = "`LOGIN_FAILED` — 없는 이메일, 틀린 비밀번호, 탈퇴 후 30일이 지난 계정 (구분하지 않는다)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "`USER_WITHDRAWN` — 비밀번호는 맞지만 탈퇴 후 30일 이내. 프론트는 복구 안내를 띄운다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping("/tokens")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {

@@ -94,6 +94,19 @@ class AuthControllerTest {
     }
 
     @Test
+    void 탈퇴_30일_이내_계정이면_403_USER_WITHDRAWN() throws Exception {
+        // 프론트는 이 코드를 보고 복구 안내를 띄운다 (U2, 지시서 8장)
+        when(authService.login(anyString(), anyString())).thenThrow(new BusinessException(ErrorCode.USER_WITHDRAWN));
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":"Passw0rd!"}"""))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("USER_WITHDRAWN"));
+    }
+
+    @Test
     void 로그아웃하면_204이고_서버는_아무것도_하지_않는다() throws Exception {
         // A4: 토큰 저장소가 없어 서버 상태 변화가 없다. 실제 로그아웃은 프론트가 토큰을 지우는 것.
         mockMvc.perform(delete(URL)
