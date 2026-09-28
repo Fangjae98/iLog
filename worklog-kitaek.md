@@ -445,30 +445,162 @@ cd backend && ./gradlew --stop && ./gradlew clean build
 
 ---
 
+## 2026-09-28 — 인증 마감 (T02~T08): 로그아웃·비밀번호 변경·임시 비밀번호·permitAll 해제
+
+작업자: kitaek
+브랜치: `feat/be/auth-complete` (base: `be` 최신 `5e99b38`)
+기준 문서: `ilog-backend-work-order.md` (지시서), `CLAUDE.md` (규칙) — 둘 다 커밋하지 않고 로컬 참조용
+상태: 커밋 7개. 테스트 **215개 통과 / 실패 0 / 건너뜀 5** (건너뜀은 전부 Docker 미실행)
+
+시작 시점 기준선은 115개 중 1개 실패였습니다. 실패는 `IlogApplicationTests`가
+로컬 DB를 요구하던 것이고, T02-5에서 Testcontainers로 옮겨 해소됐습니다.
+
+---
+
+### 이번 작업의 의미
+
+`be`는 JWT가 붙어 있었지만 `SecurityConfig`가 `permitAll`이고
+`ilog.auth.dev-header-enabled=true`여서 **`X-User-Id` 헤더에 아무 숫자나 넣으면
+그 사람이 되는 상태**였습니다. T08로 이걸 닫았습니다. 이제 토큰 없이는
+보호 API를 부를 수 없고, 탈퇴 회원의 남은 토큰도 막힙니다.
+
+### 작업별 커밋
+
+| 작업 | 커밋 | 내용 |
+|---|---|---|
+| T02 | `cb11f43` | ErrorCode 3개 삭제, 날짜 형식 고정, 로케일 고정, Testcontainers |
+| T03 | `872e94e` | 로그아웃 `DELETE /auth/tokens` (204, 서버 상태 없음) |
+| T04 | `f8a7358` | 로그인에서 탈퇴 계정 구분 (`USER_WITHDRAWN` 403) |
+| T05 | `f7617e1` | `password_history` + 재사용 검사 |
+| T06 | `7d2a579` | 비밀번호 변경 `PUT /users/me/password` |
+| T07 | `c68d9bb` | 임시 비밀번호 발급 + Gmail 메일 |
+| T08 | `3a393dd` | `permitAll` 해제, `X-User-Id` 제거 |
+
+### 막힐 뻔한 것 3가지
+
+**1. `spring.jackson.date-format`이 동작하지 않습니다 (T02-2)**
+
+Boot 4는 Jackson 3(`tools.jackson`)입니다. 그 설정은 `SimpleDateFormat`으로만
+흘러가서 `java.util.Date`에만 먹고, `LocalDateTime` 직렬화기는 자기 포매터만 봅니다.
+`JacksonModule` 타입의 `@Component`로 등록해야 `@WebMvcTest` 슬라이스까지 적용됩니다
+(`@Configuration`의 `@Bean`은 슬라이스가 집어가지 않습니다).
+`@Component`를 떼고 돌려서 테스트가 깨지는 것을 확인했습니다.
+
+**2. Testcontainers 좌표가 지시서와 다릅니다 (T02-5)**
+
+지시서는 `org.testcontainers:postgresql`인데, Boot 4.1.1 BOM은 testcontainers
+**2.0.5**를 고정하고 이 좌표를 관리하지 않아 버전 해결에 실패합니다.
+2.x는 `testcontainers-postgresql` / `testcontainers-junit-jupiter` 형태이고,
+컨테이너 클래스도 `org.testcontainers.postgresql.PostgreSQLContainer`(비제네릭)입니다.
+
+**3. 403 AccessDeniedHandler는 지시서대로 만들 수 없습니다 (T08-2)**
+
+지시서는 "403 핸들러가 `UNAUTHORIZED` JSON"이라고 하는데,
+`ErrorResponse.of()`가 ErrorCode에서 상태를 뽑아내므로 403과 401을 동시에
+만들 수 없습니다(헤더 403 / 본문 401로 어긋납니다). 게다가 권한(role) 규칙이
+없어서 `AccessDeniedException` 자체가 발생할 경로가 없습니다. 이 앱의 실제 403
+(`USER_WITHDRAWN`, `POST_NOT_OWNER`)은 서비스에서 `BusinessException`으로 던져져
+`GlobalExceptionHandler`가 처리합니다.
+→ **핸들러는 등록하되 401 `UNAUTHORIZED`를 반환**하도록 했습니다. 권한 체계가
+생기면 그때 403 코드를 지시서에 추가하고 고치면 됩니다.
+
+### 지시서와 다르게 간 것
+
+| # | 지시서 | 실제 | 근거 |
+|---|---|---|---|
+| 1 | `org.testcontainers:postgresql` | `testcontainers-postgresql` (2.x) | BOM이 2.0.5 고정, 1.x 좌표는 해결 실패 |
+| 2 | 403 AccessDeniedHandler | 401 반환 | 403+UNAUTHORIZED 조합 불가, 도달 불가 경로 |
+| 3 | 테스트 삭제 금지 | 2개 삭제 | 기능 자체가 없어져 검증 대상 소멸, 의도는 이관 |
+| 4 | — | `Clock` 주입 안 함 | T04/T07은 상대 시각으로 검증 가능, `Clock`은 T12 몫 |
+
+### T08의 실제 규모
+
+지시서는 "`X-User-Id`를 쓰는 테스트 4개"라고 했지만 실제로는
+**5개 클래스 13개 단언**이었고, `anyRequest().authenticated()`를 켜면서
+`GlobalExceptionHandlerTest`의 나머지 요청 10개에도 토큰이 필요해졌습니다.
+
+6개 클래스가 토큰과 `ActiveUserChecker` 목을 함께 쓰므로
+`SecuredSliceTestSupport`를 만들었습니다. 목 기본값이 `false`라 스텁을 빠뜨리면
+**모든 인증 요청이 401**이 되어 원인을 찾기 어렵습니다. 기반 클래스에서 한 번에 켭니다.
+
+삭제한 테스트 2개:
+- `토큰과_개발용_헤더가_함께_오면_토큰이_이긴다` — 헤더 자체가 없어짐
+- `공개_API는_무효한_토큰이_붙어도_막지_않는다` — 테스트용 경로가 더 이상 공개가 아님.
+  의도는 실제 공개 경로(`GET /users/email-availability`)로 옮겼습니다.
+
+### 확인하지 못한 것
+
+**로컬에 Docker가 떠 있지 않아 DB 테스트 5개를 돌리지 못했습니다** (실패가 아니라 skip).
+코드는 썼지만 실행된 적이 없습니다. Docker를 띄우고 `./gradlew test`를 다시 돌려야 합니다.
+
+| 항목 | 상태 |
+|---|---|
+| `PasswordHistoryServiceTest` 4개 (이력 1건, 최신 3건만 남김, 재사용 판정) | **미확인** |
+| `IlogApplicationTests.contextLoads` | **미확인** |
+| 실제 메일 발송 (Gmail 앱 비밀번호 필요) | **미확인** — 목으로만 검증 |
+| Swagger에서 로그인 → 토큰으로 게시글 API 수동 확인 | **미확인** |
+| `PUT /users/me/password` 성공 후 새 비번으로 로그인 (엔드투엔드) | **미확인** — 단위로만 검증 |
+
+### 팀에 공유할 것
+
+**1. 로컬 설정에 메일 계정이 필요합니다 (임시 비밀번호 기능을 쓸 때만)**
+
+`.env`에 `MAIL_USERNAME` / `MAIL_PASSWORD`(Gmail 앱 비밀번호 16자).
+비워 둬도 서버는 뜹니다 — 임시 비밀번호 발급만 500 `MAIL_SEND_FAILED`로 실패합니다.
+`.env.example`, `docker-compose.yml`, `application-local.properties.example`에
+자리를 만들어 뒀습니다.
+
+**2. 프론트: `X-User-Id` 헤더가 더 이상 동작하지 않습니다**
+
+인증 수단은 `Authorization: Bearer {accessToken}` 하나뿐입니다.
+Swagger UI에서도 헤더 입력칸이 사라지고 자물쇠만 남습니다.
+
+**3. 프론트: 로그인 401/403이 갈립니다**
+
+- 비밀번호는 맞지만 탈퇴 30일 이내 → **403 `USER_WITHDRAWN`** (복구 안내를 띄울 것)
+- 그 외 로그인 실패, 탈퇴 30일 경과 → 401 `LOGIN_FAILED`
+- 임시 비밀번호 24시간 만료 → 401 `TEMP_PASSWORD_EXPIRED`
+- 비밀번호 변경의 `PASSWORD_MISMATCH`는 **400**입니다. 401이면 변경 도중 로그아웃됩니다.
+
+**4. CORS는 넣지 않았습니다 (T02-4)**
+
+로컬은 vite 프록시, 배포는 nginx가 같은 출처로 만듭니다.
+다만 **팀 `fe` 브랜치에는 `vite.config.js`에 `server.proxy`가 없습니다.**
+`feat/fe/init`의 설정을 옮겨야 dev 모드에서 백엔드에 붙습니다.
+
+### 다음 단계
+
+T08까지가 플레이북 세션 1입니다. T09(Post↔User 연관관계)부터는 새 세션에서
+진행하고, 그때 로컬 DB의 게시글 관련 테이블을 재생성해야 합니다
+(`ddl-auto=update`는 기존 제약을 바꾸지 못합니다).
+
+---
+
 ## 결정이 필요한 것
 
 ### 1. ~~`User` vs `Member`~~ — 해결됨 (위 4번 작업으로 반영)
 
 `User`로 통일하기로 결정. global 쪽 명명이 잘못된 것이었습니다.
 
-### 2. 아직 안 만든 것 (ErrorCode에는 있으나 스펙이 없어 보류)
+### 2. ~~아직 안 만든 것 (ErrorCode에는 있으나 스펙이 없어 보류)~~ — 해결됨 (2026-09-28, T05~T07)
 
-| ErrorCode | 필요한 것 |
-|---|---|
-| `PASSWORD_REUSED` | 이전 비밀번호 이력 테이블 (몇 개까지 보관할지 결정 필요) |
-| `TEMP_PASSWORD_EXPIRED` | 임시 비밀번호 발급 시각 + 만료 기준 |
-| `REJOIN_RESTRICTED` | 탈퇴 후 재가입 제한 기간 |
+지시서(`ilog-backend-work-order.md`) 2장이 기준값을 확정해 주면서 셋 다 채워졌습니다.
 
-서비스·컨트롤러·DTO도 만들지 않았습니다. API 스펙(엔드포인트, 검증 규칙)이
-정해지면 이어서 작업합니다.
+| ErrorCode | 그때 필요했던 것 | 확정값 |
+|---|---|---|
+| `PASSWORD_REUSED` | 몇 개까지 보관할지 | 최근 **3개(현재 포함)**, `password_history` 테이블 (U7, D-13) |
+| `TEMP_PASSWORD_EXPIRED` | 발급 시각 + 만료 기준 | `temp_password_expires_at`, **24시간** (U6, D-12) |
+| `REJOIN_RESTRICTED` | 재가입 제한 기간 | 탈퇴 후 **30일** (U1, U5) — 이미 구현돼 있었음 |
 
-### 3. 게시글 API의 401 문구 (2026-09-21)
+`UserPolicy`에 `PASSWORD_HISTORY_LIMIT`, `TEMP_PASSWORD_VALIDITY_HOURS`,
+`WITHDRAWAL_RECOVERY_DAYS`로 상수화했습니다.
 
-회원 API는 401 설명에 `UNAUTHORIZED`와 `TOKEN_EXPIRED`를 함께 적어뒀는데,
-`TOKEN_EXPIRED`는 아직 `main/` 어디서도 던지지 않습니다 (ErrorCode 선언에도 `[논의 필요]`).
-3단계 JWT를 내다본 표기로 보여 회원 쪽은 그대로 뒀고,
-게시글 쪽은 코드로 확인되는 `UNAUTHORIZED`만 적었습니다.
-JWT 적용 때 양쪽을 어느 쪽으로 맞출지 정해주세요.
+### 3. ~~게시글 API의 401 문구 (2026-09-21)~~ — 해결됨 (2026-09-28, T02-1)
+
+`TOKEN_EXPIRED`를 **삭제**하고 `UNAUTHORIZED` 하나로 통일했습니다 (A3).
+리프레시 토큰이 없어서 만료든 위조든 프론트 동작은 "다시 로그인" 하나뿐이고,
+프론트가 `UNAUTHORIZED`일 때만 세션을 지우도록 짜여 있어 `TOKEN_EXPIRED`를 쓰면
+만료 토큰이 남아 요청이 계속 실패합니다. 회원 API의 Swagger 설명도 함께 정리했습니다.
 
 ### 4. `GET /api/v1/posts` 경로 충돌 (2026-09-21)
 
