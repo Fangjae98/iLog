@@ -14,6 +14,11 @@ spring.datasource.url=jdbc:postgresql://localhost:5432/ilogdb
 spring.datasource.username=your_db_user
 spring.datasource.password=your_db_password
 
+# JWT 서명 키. 32바이트 이상. 아래 명령으로 만든 값으로 바꿔 쓰세요.
+#   openssl rand -base64 48
+# 비워 두면 서버가 뜨지 않습니다. 테스트도 local 프로필로 돌아서 이 값을 씁니다.
+ilog.jwt.secret=local-dev-only-change-me-0123456789abcdef
+
 # 로컬에서 실행되는 SQL 을 보고 싶을 때 (format_sql 은 application.properties 에 이미 켜져 있음)
 spring.jpa.show-sql=true
 

@@ -23,6 +23,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'   // Swagger UI. Spring Boot 4.1.x 대응 버전
+	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'                           // JWT 발급·검증
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'   // Jackson 2. springdoc 이 이미 쓰는 jar 라 새로 늘지 않고 버전은 Boot BOM 이 맞춘다
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	runtimeOnly 'org.postgresql:postgresql'
