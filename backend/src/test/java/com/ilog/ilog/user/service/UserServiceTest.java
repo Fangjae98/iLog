@@ -27,9 +27,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,13 +42,16 @@ class UserServiceTest {
     @Mock
     UserRepository userRepository;
 
+    @Mock
+    PasswordHistoryService passwordHistoryService;
+
     PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     UserService userService;
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordEncoder);
+        userService = new UserService(userRepository, passwordEncoder, passwordHistoryService);
     }
 
     // ---------- 회원가입 ----------
@@ -72,6 +77,32 @@ class UserServiceTest {
         assertThat(passwordEncoder.matches(RAW_PASSWORD, saved.getPassword())).isTrue();
         assertThat(saved.isTempPassword()).isFalse();
         assertThat(saved.isWithdrawn()).isFalse();
+    }
+
+    @Test
+    void 가입에_성공하면_비밀번호_이력을_1건_남긴다() {
+        // U7: 가입 직후부터 재사용 검사가 동작해야 한다
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 7L);
+            return saved;
+        });
+
+        userService.signup(new SignupRequest("user@example.com", RAW_PASSWORD, "박기택", "기택"));
+
+        ArgumentCaptor<String> hash = ArgumentCaptor.forClass(String.class);
+        verify(passwordHistoryService).record(eq(7L), hash.capture());
+        assertThat(passwordEncoder.matches(RAW_PASSWORD, hash.getValue())).isTrue();
+        assertThat(hash.getValue()).isNotEqualTo(RAW_PASSWORD);   // 평문이 넘어가면 안 된다
+    }
+
+    @Test
+    void 가입에_실패하면_비밀번호_이력을_남기지_않는다() {
+        when(userRepository.findByEmail("a@b.com")).thenReturn(Optional.of(activeUser(1L, "a@b.com", "다른닉")));
+
+        assertBusiness(() -> userService.signup(new SignupRequest("a@b.com", RAW_PASSWORD, "박기택", "기택")),
+                ErrorCode.USER_DUPLICATE_EMAIL);
+        verifyNoInteractions(passwordHistoryService);
     }
 
     @ParameterizedTest

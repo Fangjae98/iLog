@@ -18,6 +18,12 @@ public final class UserPolicy {
      */
     public static final int WITHDRAWAL_RECOVERY_DAYS = 30;
 
+    /**
+     * 재사용을 막을 최근 비밀번호 개수 (U7, D-13). 현재 비밀번호를 포함해 센다.
+     * 임시 비밀번호는 이력에 넣지 않는다.
+     */
+    public static final int PASSWORD_HISTORY_LIMIT = 3;
+
     /** 8~20자, 영문·숫자·특수문자(!@#$%^&*) 각 1개 이상. */
     private static final Pattern PASSWORD = Pattern.compile(
             "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,20}$");

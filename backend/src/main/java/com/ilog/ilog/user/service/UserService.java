@@ -24,6 +24,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordHistoryService passwordHistoryService;
 
     /**
      * 회원가입 (MBR-01).
@@ -47,14 +48,24 @@ public class UserService {
                 .name(request.name())
                 .nickname(request.nickname())
                 .build();
+        User saved;
         try {
-            return userRepository.saveAndFlush(user).getId();
+            saved = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
             // 사전 검사와 저장 사이에 같은 값이 먼저 들어간 경우. 유니크 제약이 최종 방어선이다.
             validateEmailNotTaken(email);
             validateNicknameNotTaken(request.nickname());
             throw e;
         }
+
+        // 반드시 try 밖에서, 저장 성공 뒤에 부른다 (U7).
+        //  - FK 가 회원 행을 요구하므로 insert 뒤여야 한다.
+        //  - try 안에 두면 이력 저장 실패가 위 catch 로 들어가, 중복이 아닌데
+        //    중복 이메일/닉네임이라고 잘못 보고하게 된다.
+        // 가입과 이력을 묶는 트랜잭션은 없다. 그 사이에 죽으면 이력 행이 비는데,
+        // isReused 가 현재 해시도 함께 보므로 현재 비밀번호 재사용 구멍은 생기지 않는다.
+        passwordHistoryService.record(saved.getId(), saved.getPassword());
+        return saved.getId();
     }
 
     /** 이메일 사용 가능 확인 (MBR-02). 탈퇴 후 30일 이내 계정은 WITHDRAWN 으로 구분한다. */
