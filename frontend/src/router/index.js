@@ -5,11 +5,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes = [
+  // 비로그인 전용
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue'), meta: { guestOnly: true } },
   { path: '/signup', name: 'signup', component: () => import('@/views/auth/SignupView.vue'), meta: { guestOnly: true } },
   { path: '/password/find', name: 'password-find', component: () => import('@/views/auth/PasswordFindView.vue'), meta: { guestOnly: true } },
+
+  // 로그인 필요
   { path: '/password/change', name: 'password-change', component: () => import('@/views/auth/PasswordChangeView.vue'), meta: { requiresAuth: true } },
+  { path: '/mypage', name: 'mypage', component: () => import('@/views/user/MyPageView.vue'), meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

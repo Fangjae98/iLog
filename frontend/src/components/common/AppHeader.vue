@@ -1,6 +1,6 @@
 <!--
   앱 전체에서 공통으로 사용하는 로그인 사용자용 헤더
-  현재 로그인한 사용자의 닉네임과 로그아웃 버튼을 표시하고,
+  마이페이지 이동 링크와 현재 로그인한 사용자의 닉네임·로그아웃 버튼을 표시하고,
   로그아웃하면 인증 정보와 브라우저 세션을 삭제한 뒤 로그인 화면으로 이동함.
 -->
 
@@ -27,6 +27,10 @@ async function onLogout() {
       <span class="logo">iLog</span>
 
       <div class="account">
+        <RouterLink class="btn btn-sm" :to="{ name: 'mypage' }">
+          마이페이지
+        </RouterLink>
+
         <span v-if="user" class="nickname">
           {{ user.nickname }}님
         </span>
@@ -74,6 +78,12 @@ async function onLogout() {
 @media (max-width: 760px) {
   .app-header-inner {
     padding: 0 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .nickname {
+    display: none;
   }
 }
 </style>
