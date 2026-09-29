@@ -1,7 +1,6 @@
 package com.ilog.ilog.user.dto;
 
 import com.ilog.ilog.user.domain.User;
-import com.ilog.ilog.user.domain.UserPolicy;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -17,6 +16,6 @@ public record WithdrawalResponse(
 ) {
 
     public static WithdrawalResponse from(User user) {
-        return new WithdrawalResponse(user.getWithdrawnAt().plusDays(UserPolicy.WITHDRAWAL_RECOVERY_DAYS));
+        return new WithdrawalResponse(user.recoverableUntil());
     }
 }

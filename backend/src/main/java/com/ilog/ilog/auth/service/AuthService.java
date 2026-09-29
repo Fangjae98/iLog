@@ -5,7 +5,6 @@ import com.ilog.ilog.global.auth.jwt.JwtTokenProvider;
 import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
 import com.ilog.ilog.user.domain.User;
-import com.ilog.ilog.user.domain.UserPolicy;
 import com.ilog.ilog.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,11 +51,8 @@ public class AuthService {
         LocalDateTime now = LocalDateTime.now();
 
         if (user.isWithdrawn()) {
-            boolean recoverable = user.getWithdrawnAt()
-                    .plusDays(UserPolicy.WITHDRAWAL_RECOVERY_DAYS)
-                    .isAfter(now);
             // 복구 기간이 지났으면 곧 물리 삭제될 계정이라 존재를 알리지 않는다
-            throw new BusinessException(recoverable ? ErrorCode.USER_WITHDRAWN : ErrorCode.LOGIN_FAILED);
+            throw new BusinessException(user.isRecoverable(now) ? ErrorCode.USER_WITHDRAWN : ErrorCode.LOGIN_FAILED);
         }
 
         // 임시 비밀번호는 24시간만 유효하다 (U6). 만료되면 다시 발급받아야 한다.
@@ -91,10 +87,7 @@ public class AuthService {
             return;
         }
 
-        boolean recoverable = user.getWithdrawnAt()
-                .plusDays(UserPolicy.WITHDRAWAL_RECOVERY_DAYS)
-                .isAfter(LocalDateTime.now());
-        if (!recoverable) {
+        if (!user.isRecoverable(LocalDateTime.now())) {
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
         user.restore();
