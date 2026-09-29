@@ -2,6 +2,7 @@ package com.ilog.ilog.post.service;
 
 import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
+import com.ilog.ilog.post.domain.PostPolicy;
 import com.ilog.ilog.post.dto.PostCreateRequest;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
@@ -35,9 +36,6 @@ import java.util.List;
 @RequiredArgsConstructor     // final 필드를 받는 생성자 자동 생성 → Spring이 PostRepository를 넣어 줌 (생성자 주입)
 @Transactional(readOnly = true)   // 기본은 "읽기 전용" 트랜잭션. 데이터를 바꾸는 메서드에만 따로 @Transactional을 붙인다
 public class PostService {
-
-    /** 글 하나에 붙일 수 있는 해시태그 최대 개수 (D-09 확정) */
-    private static final int HASHTAG_MAX_COUNT = 10;
 
     /** 내 게시글 조회에서 한 쪽에 보여 줄 글 개수 */
     private static final int MY_POST_PAGE_SIZE = 5;
@@ -114,7 +112,8 @@ public class PostService {
      * 게시글 수정 (명세 FN-PST-003)
      *
      * 작성자 본인만 수정할 수 있다.
-     * 받은 내용으로 제목·본문·URL·태그를 통째로 교체한다. (D-06 확정)
+     * 보낸 필드만 바꾸고, 안 보낸(null) 필드는 그대로 둔다. (P5)
+     * 바뀐 값이 없어도 수정 일시는 갱신된다. (P6)
      *
      * @throws BusinessException 글이 없으면 POST_NOT_FOUND(404), 남의 글이면 POST_NOT_OWNER(403)
      */
@@ -122,7 +121,8 @@ public class PostService {
     public PostResponse update(Long userId, Long postId, PostUpdateRequest request) {
         Post post = findMyPost(userId, postId);
 
-        List<String> hashtags = refineHashtags(request.hashtags());
+        // 태그를 안 보냈으면(null) 다듬지 않고 null 그대로 넘긴다 → 기존 태그 유지
+        List<String> hashtags = request.hashtags() == null ? null : refineHashtags(request.hashtags());
         post.update(request.title(), request.content(), request.urls(), hashtags);
 
         // save()를 부르지 않는 이유:
@@ -168,30 +168,27 @@ public class PostService {
     }
 
     /**
-     * 해시태그 다듬기
+     * 해시태그 다듬기 (P3, P4)
      *
      * 화면(프론트)에서도 '#' 제거·중복 제거를 하지만, 서버로는 어떤 값이든 들어올 수 있으므로
      * 저장 직전에 한 번 더 정리한다. (프론트를 거치지 않는 요청도 가능하기 때문)
+     * 다듬는 규칙은 검색(T15)과 같아야 해서 PostPolicy에 두고 같이 쓴다.
      *
-     *   입력:  ["#여행", " 맛집 ", "여행", ""]
-     *   결과:  ["여행", "맛집"]
+     *   입력:  ["#Spring", "spring", " JWT "]
+     *   결과:  ["spring", "jwt"]
+     *
+     * 순서가 곧 정책이다.
+     *   ① 공백·'#' 제거, 소문자 → ② 중복 제거 → ③ 10개 초과면 HASHTAG_LIMIT_EXCEEDED
+     *   → ④ 1~20자 한글·영문·숫자·_ 가 아니면 INVALID_INPUT ("#"만 보낸 경우처럼 빈 값 포함)
      */
     private List<String> refineHashtags(List<String> rawHashtags) {
-        if (rawHashtags == null) {
-            return List.of();   // 태그를 안 보냈으면 빈 목록
-        }
+        List<String> refined = PostPolicy.normalizeHashtags(rawHashtags);
 
-        List<String> refined = rawHashtags.stream()
-                .map(String::trim)                        // 앞뒤 공백 제거:  " 맛집 " → "맛집"
-                .map(tag -> tag.replaceAll("^#+", ""))    // 맨 앞의 # 제거:  "#여행" → "여행"
-                .map(String::trim)                        // "# 여행"처럼 # 뒤에 공백이 있던 경우 한 번 더
-                .filter(tag -> !tag.isEmpty())            // 빈 문자열 제외
-                .distinct()                               // 중복 제거:      ["여행", "여행"] → ["여행"]
-                .toList();
-
-        // 다듬은 뒤의 개수로 검사한다. (중복을 제거하기 전 개수로 막으면 사용자에게 불리)
-        if (refined.size() > HASHTAG_MAX_COUNT) {
+        if (refined.size() > PostPolicy.HASHTAG_MAX_COUNT) {
             throw new BusinessException(ErrorCode.HASHTAG_LIMIT_EXCEEDED);
+        }
+        if (!refined.stream().allMatch(PostPolicy::isValidHashtag)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         return refined;
     }

@@ -175,7 +175,7 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].post.summary").value("게시글 작성 (FN-PST-001)"))
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].get.summary").value("내 게시글 조회 (FN-PST-006)"))
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.summary").value("게시글 상세 조회 (FN-PST-002)"))
-                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].put.summary").value("게시글 수정 (FN-PST-003)"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].patch.summary").value("게시글 수정 (FN-PST-003)"))
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.summary").value("게시글 삭제 (FN-PST-004)"));
     }
 
@@ -199,7 +199,7 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].post.security[0].bearerAuth").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].get.security[0].bearerAuth").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.security[0].bearerAuth").exists())
-                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].put.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].patch.security[0].bearerAuth").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.security[0].bearerAuth").exists())
                 // LoginUser 는 전역 설정으로 숨겨져 있어서 요청 파라미터로 새어 나오지 않는다.
                 // 개발용 헤더까지 없앤 지금은 이 오퍼레이션에 파라미터가 아예 없다 (T08).
@@ -226,7 +226,7 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
                         .value("#/components/schemas/ErrorResponse"))
                 .andExpect(jsonPath(detail + ".get.responses['404'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"))
-                .andExpect(jsonPath(detail + ".put.responses['403'].content['application/json'].schema['$ref']")
+                .andExpect(jsonPath(detail + ".patch.responses['403'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"))
                 .andExpect(jsonPath(detail + ".delete.responses['401'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"));

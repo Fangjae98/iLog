@@ -119,7 +119,10 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     }
 
     /**
-     * 게시글 수정 (D-06 확정: 제목·본문·URL·태그 모두 수정 가능)
+     * 게시글 수정 (P5: 보낸 필드만 수정)
+     *
+     * 파라미터가 null이면 "안 보냈다" = 원래 값을 그대로 둔다.
+     * 값이 있으면 그 값으로 바꾸고, URL·태그는 받은 목록으로 통째로 교체한다. (빈 목록이면 모두 지움)
      *
      * Setter를 열어 두는 대신 이렇게 "무슨 일을 하는지 이름이 붙은" 메서드로만 값을 바꾼다.
      * 아무 데서나 post.setTitle(...)을 할 수 있으면, 나중에 값이 어디서 바뀌었는지 찾기 어려워진다.
@@ -128,20 +131,41 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
      * 그래서 이 메서드를 부르기만 하면 되고, 따로 save()를 부르지 않아도 된다.
      */
     public void update(String title, String content, List<String> urls, List<String> hashtags) {
-        this.title = title;
-        this.content = content;
+        if (title != null) {
+            this.title = title;
+        }
+        if (content != null) {
+            this.content = content;
+        }
 
-        // URL·태그는 "일부만 바꾸기"가 아니라 "받은 목록으로 통째로 교체"한다.
-        // 기존 것을 비우고 새로 담으면, 지워진 것은 DB에서도 삭제된다(orphanRemoval).
-        this.urls.clear();
+        // URL은 기존 것을 비우고 새로 담는다. (post_url에는 UNIQUE 제약이 없어 순서대로 다시 써도 된다)
         if (urls != null) {
+            this.urls.clear();
             this.urls.addAll(urls);
         }
-
-        this.hashtags.clear();
         if (hashtags != null) {
-            hashtags.forEach(name -> this.hashtags.add(new PostHashtag(this, name)));
+            replaceHashtags(hashtags);
         }
+
+        // 바뀐 값이 없어도 "수정했다"는 기록은 남긴다 (P6, 명세 PST-04)
+        markUpdated();
+    }
+
+    /**
+     * 태그를 받은 목록으로 교체한다.
+     *
+     * 전부 비우고 다시 담지 않는 이유:
+     *   Hibernate는 새 태그 INSERT를 고아 삭제(DELETE)보다 먼저 실행한다.
+     *   그래서 같은 태그를 다시 보내면 지워지기 전의 행과 부딪혀 UNIQUE(post_id, name) 위반이 난다.
+     *   → 목록에서 빠진 태그만 지우고(orphanRemoval), 새로 생긴 태그만 추가한다. 그대로인 태그는 건드리지 않는다.
+     */
+    private void replaceHashtags(List<String> names) {
+        this.hashtags.removeIf(tag -> !names.contains(tag.getName()));
+
+        List<String> kept = getHashtagNames();
+        names.stream()
+                .filter(name -> !kept.contains(name))
+                .forEach(name -> this.hashtags.add(new PostHashtag(this, name)));
     }
 
     /** 이 글을 쓴 사람이 맞는지 확인한다. 수정·삭제 전에 Service에서 호출한다. */

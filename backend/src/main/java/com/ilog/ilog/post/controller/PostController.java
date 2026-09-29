@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -82,11 +82,13 @@ public class PostController {
             description = """
                     로그인한 회원이 새 게시글을 쓴다. 성공하면 201 과 저장된 게시글을 돌려준다.
 
-                    작성자는 요청 본문이 아니라 로그인 정보에서 정한다. `urls` 와 `hashtags` 는 보내지 않아도 된다.
+                    작성자는 요청 본문이 아니라 로그인 정보에서 정한다. 제목·내용은 필수, `urls` 와 `hashtags` 는 보내지 않아도 된다(P1).
 
-                    처리 순서: 입력값 검증 → 해시태그 다듬기(맨 앞 `#` 제거, 앞뒤 공백 제거, 중복 제거) → 개수 검사 → 저장.""")
+                    처리 순서: 입력값 검증(제목 100자·내용 1000자·URL 5개) → 해시태그 다듬기(앞뒤 공백·맨 앞 `#` 제거, 소문자, 중복 제거)
+                    → 개수 검사(10개) → 글자 규칙 검사(1~20자 한글·영문·숫자·`_`) → 저장.""")
     @ApiResponse(responseCode = "201", description = "작성 성공. 저장된 게시글을 돌려준다")
-    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용 누락, 제목 100자 초과, `urls`·`hashtags` 의 항목이 빈 값) 또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용 누락, 제목 100자·내용 1000자 초과, URL 6개 이상·형식·2,048자 초과, 해시태그 글자 규칙 위반) "
+            + "또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -181,10 +183,10 @@ public class PostController {
     /**
      * 게시글 수정 API (명세 FN-PST-003)
      *
-     *   PUT /api/v1/posts/3
+     *   PATCH /api/v1/posts/3
      *
-     * PUT을 쓴 이유: 보낸 내용으로 글을 통째로 바꾸기 때문. (일부만 바꾸는 방식은 보통 PATCH)
-     * TODO API 명세서에 PATCH로 되어 있으면 @PutMapping → @PatchMapping 으로 바꾸면 된다.
+     * PATCH를 쓰는 이유: 보낸 필드만 바꾸는 부분 수정이기 때문. (P5, 프론트가 PATCH로 호출)
+     * 수정 화면은 네 필드를 모두 보내므로 결과는 통째로 교체와 같다.
      *
      * 작성자 본인만 가능: 남의 글이면 403 POST_NOT_OWNER
      * 없는 글이면: 404 POST_NOT_FOUND
@@ -193,12 +195,14 @@ public class PostController {
      */
     @Operation(summary = "게시글 수정 (FN-PST-003)",
             description = """
-                    작성자 본인만 수정할 수 있다. 보낸 내용으로 제목·본문·URL·해시태그를 통째로 교체한다(D-06).
+                    작성자 본인만 수정할 수 있다. **보낸 필드만 바꾼다**(P5). 보내지 않은 필드는 원래 값을 그대로 둔다.
 
-                    `urls` 나 `hashtags` 를 보내지 않거나 빈 배열로 보내면 원래 있던 값이 모두 지워진다.
+                    `urls` 나 `hashtags` 를 보내면 그 목록으로 통째로 교체하고, 빈 배열로 보내면 모두 지운다.
+                    바뀐 값이 없어도 수정 일시(`updatedAt`)는 갱신된다(P6).
                     없는 글(404)과 남의 글(403)은 다른 코드로 구분해서 돌려준다.""")
     @ApiResponse(responseCode = "200", description = "수정 성공. 수정 일시가 채워진 게시글을 돌려준다")
-    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용 누락, 제목 100자 초과, 항목이 빈 값, `postId` 가 숫자 아님) 또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용을 빈 값으로 보냄, 길이·개수·URL 형식·해시태그 글자 규칙 위반, `postId` 가 숫자 아님) "
+            + "또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -206,7 +210,7 @@ public class PostController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @PutMapping("/{postId}")
+    @PatchMapping("/{postId}")
     public ResponseEntity<PostResponse> update(@Login LoginUser loginUser,
                                                @PathVariable Long postId,
                                                @Valid @RequestBody PostUpdateRequest request) {
