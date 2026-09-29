@@ -3,3 +3,6 @@ build
 bin
 *.log
 .git
+# 로컬 전용 비밀 설정(JWT 키, DB 비밀번호). 이미지에 들어가지 않게 뺀다.
+# 컨테이너는 docker-compose.yml 이 넘기는 환경변수로 설정을 받는다.
+src/main/resources/application-local.properties
