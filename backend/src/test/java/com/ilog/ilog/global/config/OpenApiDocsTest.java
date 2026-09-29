@@ -72,6 +72,16 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
     }
 
     @Test
+    void 계정_복구는_공개_API로_문서화된다() throws Exception {
+        String recovery = "$.paths['/api/v1/auth/account-recoveries'].post";
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(recovery + ".summary").value("탈퇴 계정 복구 (AUTH-04)"))
+                .andExpect(jsonPath(recovery + ".security").doesNotExist())
+                .andExpect(jsonPath(recovery + ".responses['204']").exists())
+                .andExpect(jsonPath("$.components.schemas.AccountRecoveryRequest.properties.password.format").value("password"));
+    }
+
+    @Test
     void 회원_API_7개가_문서에_나온다() throws Exception {
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/api/v1/users'].post.summary").value("회원가입 (MBR-01)"))

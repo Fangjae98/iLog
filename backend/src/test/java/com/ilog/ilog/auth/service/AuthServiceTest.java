@@ -143,6 +143,55 @@ class AuthServiceTest {
         assertLoginFailed(() -> authService.login(EMAIL, "Wrong123!"));
     }
 
+    // ---------- 탈퇴 계정 복구 (AUTH-04) ----------
+
+    @Test
+    void 탈퇴_30일_이내면_복구되고_이후_로그인할_수_있다() {
+        User user = user(1L);
+        user.withdraw(LocalDateTime.now().minusDays(29));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        authService.recover("User@Example.com", RAW_PASSWORD);
+
+        assertThat(user.isWithdrawn()).isFalse();
+        assertThat(authService.login(EMAIL, RAW_PASSWORD).accessToken()).isNotBlank();
+    }
+
+    @Test
+    void 탈퇴_30일이_지났으면_복구도_LOGIN_FAILED() {
+        User user = user(1L);
+        user.withdraw(LocalDateTime.now().minusDays(31));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertLoginFailed(() -> authService.recover(EMAIL, RAW_PASSWORD));
+        assertThat(user.isWithdrawn()).isTrue();
+    }
+
+    @Test
+    void 활성_계정을_복구하면_아무것도_바꾸지_않는다() {
+        User user = user(1L);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        authService.recover(EMAIL, RAW_PASSWORD);
+
+        assertThat(user.isWithdrawn()).isFalse();
+    }
+
+    @Test
+    void 복구_비밀번호가_틀리면_LOGIN_FAILED_이고_탈퇴_상태가_유지된다() {
+        User user = user(1L);
+        user.withdraw(LocalDateTime.now().minusDays(1));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+
+        assertLoginFailed(() -> authService.recover(EMAIL, "Wrong123!"));
+        assertThat(user.isWithdrawn()).isTrue();
+    }
+
+    @Test
+    void 없는_이메일의_복구는_LOGIN_FAILED() {
+        assertLoginFailed(() -> authService.recover("none@example.com", RAW_PASSWORD));
+    }
+
     private User user(Long id) {
         User user = User.builder()
                 .email(EMAIL)

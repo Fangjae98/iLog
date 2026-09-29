@@ -16,6 +16,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -206,5 +207,41 @@ class AuthControllerTest extends SecuredSliceTestSupport {
                         .content("""
                                 {"email":"user@example.com","password":"Passw0rd!"}"""))
                 .andExpect(status().isOk());
+    }
+
+    // ---------- AUTH-04 탈퇴 계정 복구 ----------
+
+    @Test
+    void 복구는_로그인_없이_부르고_204() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/account-recoveries")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":"Passw0rd!"}"""))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+        verify(authService).recover("user@example.com", "Passw0rd!");
+    }
+
+    @Test
+    void 복구_정보가_틀리면_401_LOGIN_FAILED() throws Exception {
+        doThrow(new BusinessException(ErrorCode.LOGIN_FAILED)).when(authService).recover(anyString(), anyString());
+
+        mockMvc.perform(post("/api/v1/auth/account-recoveries")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":"Wrong123!"}"""))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("LOGIN_FAILED"));
+    }
+
+    @Test
+    void 복구_비밀번호가_비어있으면_400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/account-recoveries")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":""}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        verifyNoInteractions(authService);
     }
 }

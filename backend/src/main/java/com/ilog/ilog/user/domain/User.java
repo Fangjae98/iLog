@@ -107,4 +107,9 @@ public class User extends BaseTimeEntity {
     public void withdraw(LocalDateTime withdrawnAt) {
         this.withdrawnAt = withdrawnAt;
     }
+
+    /** 탈퇴를 취소한다 (AUTH-04). 30일 경과 여부는 서비스에서 먼저 확인한다. */
+    public void restore() {
+        this.withdrawnAt = null;
+    }
 }
