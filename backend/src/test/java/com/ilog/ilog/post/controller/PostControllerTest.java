@@ -1,6 +1,9 @@
 package com.ilog.ilog.post.controller;
 
 import com.ilog.ilog.support.SecuredSliceTestSupport;
+import com.ilog.ilog.post.dto.PostAuthorResponse;
+import com.ilog.ilog.post.dto.PostCreateResponse;
+import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.service.PostService;
 import org.junit.jupiter.api.DisplayName;
@@ -15,10 +18,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -27,6 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -133,12 +141,13 @@ class PostControllerTest extends SecuredSliceTestSupport {
     @DisplayName("URL 2048자는 받는다")
     void URL_2048자는_받는다() throws Exception {
         String url = "https://a.com/" + "a".repeat(2048 - "https://a.com/".length());
+        given(postService.create(eq(1L), any())).willReturn(new PostCreateResponse(1L));
 
         mockMvc.perform(post("/api/v1/posts")
                         .header(HttpHeaders.AUTHORIZATION, bearer(1))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"제목\",\"content\":\"내용\",\"urls\":[\"" + url + "\"]}"))
-                .andExpect(status().is2xxSuccessful());
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -176,5 +185,39 @@ class PostControllerTest extends SecuredSliceTestSupport {
                         .content("""
                                 {"title":"새 제목"}"""))
                 .andExpect(status().isMethodNotAllowed());
+    }
+
+    // ---------- T14 응답 (P7) ----------
+
+    @Test
+    @DisplayName("작성하면 201, 새 글 번호, Location 헤더")
+    void 작성_응답은_postId와_Location() throws Exception {
+        given(postService.create(eq(1L), any())).willReturn(new PostCreateResponse(12L));
+
+        mockMvc.perform(post("/api/v1/posts")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"제목","content":"내용"}"""))
+                .andExpect(status().isCreated())
+                .andExpect(header().string(HttpHeaders.LOCATION, "/api/v1/posts/12"))
+                .andExpect(jsonPath("$.postId").value(12));
+    }
+
+    @Test
+    @DisplayName("상세 응답은 postId, author, isMine 이름으로 나간다")
+    void 상세_응답_필드_이름() throws Exception {
+        given(postService.getPost(1L, 12L)).willReturn(new PostResponse(12L, "제목", "내용", List.of(), List.of("spring"),
+                new PostAuthorResponse(1L, "기택"), true, LocalDateTime.of(2026, 9, 16, 10, 30, 0, 5), null));
+
+        mockMvc.perform(get("/api/v1/posts/12").header(HttpHeaders.AUTHORIZATION, bearer(1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.postId").value(12))
+                .andExpect(jsonPath("$.author.userId").value(1))
+                .andExpect(jsonPath("$.author.nickname").value("기택"))
+                .andExpect(jsonPath("$.isMine").value(true))
+                .andExpect(jsonPath("$.mine").doesNotExist())
+                .andExpect(jsonPath("$.createdAt").value("2026-09-16T10:30:00"))
+                .andExpect(jsonPath("$.updatedAt").value((Object) null));
     }
 }

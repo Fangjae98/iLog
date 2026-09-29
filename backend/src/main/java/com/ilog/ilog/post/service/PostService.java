@@ -4,6 +4,7 @@ import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
 import com.ilog.ilog.post.domain.PostPolicy;
 import com.ilog.ilog.post.dto.PostCreateRequest;
+import com.ilog.ilog.post.dto.PostCreateResponse;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
@@ -49,10 +50,10 @@ public class PostService {
      *
      * @param userId 로그인한 회원 번호 (Controller가 로그인 정보에서 꺼내 전달)
      * @param request  사용자가 입력한 제목/내용/url/해시태그
-     * @return 저장된 게시글 정보
+     * @return 새 글 번호 (P7: 프론트는 이 번호로 상세 화면으로 이동한다)
      */
     @Transactional   // 쓰기 작업이라 readOnly를 풀어 줌. 중간에 예외가 나면 DB 변경이 모두 취소(롤백)된다
-    public PostResponse create(Long userId, PostCreateRequest request) {
+    public PostCreateResponse create(Long userId, PostCreateRequest request) {
         // 1. 해시태그 다듬기 + 개수 검사
         List<String> hashtags = refineHashtags(request.hashtags());
 
@@ -66,8 +67,8 @@ public class PostService {
         //    태그는 Post의 cascade 설정 덕분에 post_hashtag 표에 함께 저장된다.
         Post savedPost = postRepository.save(post);
 
-        // 4. Entity → Response DTO 변환 후 Controller로 반환
-        return PostResponse.fromEntity(savedPost);
+        // 4. 새 글 번호만 담아 Controller로 반환
+        return new PostCreateResponse(savedPost.getId());
     }
 
     /**
@@ -76,19 +77,17 @@ public class PostService {
      * 클래스에 붙은 @Transactional(readOnly = true)가 그대로 적용된다.
      * 읽기만 하므로 따로 @Transactional을 붙이지 않는다.
      *
-     * @param postId 조회할 게시글 번호
-     * @return 게시글 정보
-     * @throws BusinessException 해당 번호의 글이 없으면 POST_NOT_FOUND(404)
+     * @param loginUserId 로그인한 회원 번호. 내 글인지(isMine) 판단에 쓴다
+     * @param postId      조회할 게시글 번호
+     * @return 게시글 정보 + 작성자 + isMine
+     * @throws BusinessException 글이 없거나 작성자가 탈퇴했으면 POST_NOT_FOUND(404)
      */
-    public PostResponse getPost(Long postId) {
-        // findById는 "있을 수도, 없을 수도 있는 결과"인 Optional로 돌려준다.
-        // orElseThrow = 값이 있으면 꺼내고, 없으면 준비한 예외를 던진다.
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+    public PostResponse getPost(Long loginUserId, Long postId) {
+        Post post = findVisiblePost(postId);
 
         // urls, hashtags는 필요할 때 DB에서 읽어 오는(지연 로딩) 값이라
         // 이 변환은 반드시 트랜잭션 안(= 이 메서드 안)에서 해야 한다.
-        return PostResponse.fromEntity(post);
+        return PostResponse.fromEntity(post, loginUserId);
     }
 
     /**
@@ -135,7 +134,7 @@ public class PostService {
         //   flush()로 "지금 DB에 반영해"라고 시켜서 수정 시각이 채워진 뒤 응답을 만든다.
         postRepository.flush();
 
-        return PostResponse.fromEntity(post);
+        return PostResponse.fromEntity(post, userId);
     }
 
     /**
@@ -156,13 +155,32 @@ public class PostService {
      *
      * 없는 글과 남의 글을 다른 에러로 구분하는 이유:
      *   사용자 입장에서 "글이 사라졌다"와 "권한이 없다"는 다른 상황이라 안내 문구가 달라야 한다.
+     *
+     * 404 검사(없는 글, 탈퇴 작성자)를 403 검사보다 먼저 한다. (T14)
      */
     private Post findMyPost(Long userId, Long postId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+        Post post = findVisiblePost(postId);
 
         if (!post.isOwner(userId)) {
             throw new BusinessException(ErrorCode.POST_NOT_OWNER);
+        }
+        return post;
+    }
+
+    /**
+     * 화면에 보여도 되는 글을 작성자와 함께 찾는다. (상세·수정·삭제 공통)
+     *
+     * 작성자가 탈퇴한 글은 없는 글처럼 404로 숨긴다. (P8)
+     * 탈퇴 후 30일 안에 복구하면 다시 보인다. 글 자체는 지우지 않았기 때문.
+     */
+    private Post findVisiblePost(Long postId) {
+        // findWithUserById는 "있을 수도, 없을 수도 있는 결과"인 Optional로 돌려준다.
+        // orElseThrow = 값이 있으면 꺼내고, 없으면 준비한 예외를 던진다.
+        Post post = postRepository.findWithUserById(postId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+
+        if (post.getUser().isWithdrawn()) {
+            throw new BusinessException(ErrorCode.POST_NOT_FOUND);
         }
         return post;
     }

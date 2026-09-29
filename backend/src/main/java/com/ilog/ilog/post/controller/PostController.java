@@ -4,6 +4,7 @@ import com.ilog.ilog.global.auth.Login;
 import com.ilog.ilog.global.auth.LoginUser;
 import com.ilog.ilog.global.error.ErrorResponse;
 import com.ilog.ilog.post.dto.PostCreateRequest;
+import com.ilog.ilog.post.dto.PostCreateResponse;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
@@ -18,7 +19,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,11 +30,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
+
 /*
  * [게시글 작성 흐름] ② Controller  ← 지금 이 파일 (요청이 가장 먼저 도착하는 곳)
  *
  *   ① Client ──POST /api/v1/posts──→ ② Controller → ③ Request DTO → ④ Service → ⑤ Entity → ⑥ Repository → DB
- *   ⑧ Client ←──201 + JSON────────── ② Controller ← ⑦ Response DTO ← ④ Service
+ *   ⑧ Client ←──201 + {postId}────── ② Controller ← ⑦ Response DTO ← ④ Service
  *
  * Controller = 식당의 "주문 받는 직원".
  *   - 어떤 URL로 들어온 요청을 받을지 정하고
@@ -76,31 +78,31 @@ public class PostController {
      *     → @Valid       : DTO에 붙인 @NotBlank, @Size 규칙 검사.
      *                      어기면 이 메서드는 실행되지 않고 400(INVALID_INPUT) 에러가 난다.
      *
-     * 성공 응답: 201 Created + 저장된 게시글 JSON
+     * 성공 응답: 201 Created + { "postId": 새 글 번호 } + Location 헤더
      */
     @Operation(summary = "게시글 작성 (FN-PST-001)",
             description = """
-                    로그인한 회원이 새 게시글을 쓴다. 성공하면 201 과 저장된 게시글을 돌려준다.
+                    로그인한 회원이 새 게시글을 쓴다. 성공하면 201 과 새 글 번호(`postId`)를 돌려준다(P7).
 
                     작성자는 요청 본문이 아니라 로그인 정보에서 정한다. 제목·내용은 필수, `urls` 와 `hashtags` 는 보내지 않아도 된다(P1).
 
                     처리 순서: 입력값 검증(제목 100자·내용 1000자·URL 5개) → 해시태그 다듬기(앞뒤 공백·맨 앞 `#` 제거, 소문자, 중복 제거)
                     → 개수 검사(10개) → 글자 규칙 검사(1~20자 한글·영문·숫자·`_`) → 저장.""")
-    @ApiResponse(responseCode = "201", description = "작성 성공. 저장된 게시글을 돌려준다")
+    @ApiResponse(responseCode = "201", description = "작성 성공. 새 글 번호를 돌려주고, `Location` 헤더에 새 글 주소(`/api/v1/posts/{postId}`)를 담는다")
     @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(제목·내용 누락, 제목 100자·내용 1000자 초과, URL 6개 이상·형식·2,048자 초과, 해시태그 글자 규칙 위반) "
             + "또는 `HASHTAG_LIMIT_EXCEEDED`(다듬은 뒤 해시태그가 10개 초과)",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PostMapping   // HTTP POST 요청 + 주소 /api/v1/posts 를 이 메서드가 처리
-    public ResponseEntity<PostResponse> create(@Login LoginUser loginUser,
-                                               @Valid @RequestBody PostCreateRequest request) {
+    public ResponseEntity<PostCreateResponse> create(@Login LoginUser loginUser,
+                                                     @Valid @RequestBody PostCreateRequest request) {
 
-        PostResponse response = postService.create(loginUser.userId(), request);
+        PostCreateResponse response = postService.create(loginUser.userId(), request);
 
-        // ResponseEntity = 응답 상태코드 + 본문을 함께 담는 상자.
-        // 새로 "만들었다"는 의미로 200(OK) 대신 201(CREATED)을 쓴다.
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        // ResponseEntity = 응답 상태코드 + 헤더 + 본문을 함께 담는 상자.
+        // created(...) = 새로 "만들었다"는 201(CREATED) + 새 글 주소를 담은 Location 헤더 (P7)
+        return ResponseEntity.created(URI.create("/api/v1/posts/" + response.postId())).body(response);
     }
 
     /**
@@ -164,20 +166,21 @@ public class PostController {
      */
     @Operation(summary = "게시글 상세 조회 (FN-PST-002)",
             description = """
-                    게시글 하나를 제목·본문·URL·해시태그까지 모두 돌려준다. 로그인한 회원만 볼 수 있다.
-                    지금은 누가 보는지를 쓰지 않아서 남의 글도 볼 수 있다.""")
+                    게시글 하나를 제목·본문·URL·해시태그·작성자까지 모두 돌려준다. 로그인한 회원만 볼 수 있고, 남의 글도 볼 수 있다.
+                    `isMine` 은 로그인한 회원이 쓴 글인지다. 프론트는 이 값으로 수정·삭제 버튼을 보여 준다(P7).
+                    작성자가 탈퇴한 글은 없는 글과 같이 404 다(P8).""")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — `postId` 에 숫자가 아닌 값을 보냈다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 정보가 없거나 올바르지 않다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
+    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없거나 작성자가 탈퇴했다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/{postId}")
     public ResponseEntity<PostResponse> getPost(@Login LoginUser loginUser,
                                                 @PathVariable Long postId) {
         // 조회는 "잘 가져왔다"는 뜻의 200 OK. ResponseEntity.ok(...)가 그 줄임 표현이다.
-        return ResponseEntity.ok(postService.getPost(postId));
+        return ResponseEntity.ok(postService.getPost(loginUser.userId(), postId));
     }
 
     /**
@@ -208,7 +211,7 @@ public class PostController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "403", description = "`POST_NOT_OWNER` — 남이 쓴 글이다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
+    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없거나 작성자가 탈퇴했다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @PatchMapping("/{postId}")
     public ResponseEntity<PostResponse> update(@Login LoginUser loginUser,
@@ -238,7 +241,7 @@ public class PostController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "403", description = "`POST_NOT_OWNER` — 남이 쓴 글이다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없다",
+    @ApiResponse(responseCode = "404", description = "`POST_NOT_FOUND` — 그 번호의 글이 없거나 작성자가 탈퇴했다",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @DeleteMapping("/{postId}")
     public ResponseEntity<Void> delete(@Login LoginUser loginUser,

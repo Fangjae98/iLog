@@ -3,7 +3,10 @@ package com.ilog.ilog.post.repository;
 import com.ilog.ilog.post.entity.Post;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
 
 /*
  * [게시글 작성 흐름] ⑥ Repository  ← 지금 이 파일
@@ -38,4 +41,14 @@ public interface PostRepository extends JpaRepository<Post, Long> {
      * "몇 쪽짜리인지, 전체 몇 건인지"를 담은 Page로 돌려준다.
      */
     Page<Post> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
+    /**
+     * 글 하나를 작성자(User)와 함께 한 번에 조회한다.
+     *
+     * @EntityGraph(user) : posts와 users를 JOIN해서 SELECT 한 번으로 가져온다.
+     * 상세·수정·삭제 모두 작성자의 탈퇴 여부(P8)와 닉네임(P7)이 필요해서,
+     * findById 후 작성자를 따로 조회(SELECT 2번)하지 않도록 한다.
+     */
+    @EntityGraph(attributePaths = "user")
+    Optional<Post> findWithUserById(Long id);
 }

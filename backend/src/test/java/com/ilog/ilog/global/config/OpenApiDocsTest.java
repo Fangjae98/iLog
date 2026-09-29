@@ -210,7 +210,11 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
     void 게시글_성공_응답은_응답_DTO_스키마를_가리킨다() throws Exception {
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].post.responses['201'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/PostCreateResponse"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.responses['200'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/PostResponse"))
+                .andExpect(jsonPath("$.components.schemas.PostResponse.properties.isMine").exists())
+                .andExpect(jsonPath("$.components.schemas.PostResponse.properties.author").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].get.responses['200'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/PostPageResponse"))
                 // 삭제는 돌려줄 내용이 없어서 204 에 본문 스키마가 붙지 않는다
