@@ -72,14 +72,17 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
     }
 
     @Test
-    void 회원_API_6개가_문서에_나온다() throws Exception {
+    void 회원_API_7개가_문서에_나온다() throws Exception {
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/api/v1/users'].post.summary").value("회원가입 (MBR-01)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/email-availability'].get.summary").value("이메일 사용 가능 확인 (MBR-02)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/nickname-availability'].get.summary").value("닉네임 사용 가능 확인 (MBR-03)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/me/password-verification'].post.summary").value("비밀번호 재확인 + 개인정보 조회 (MBR-05)"))
                 .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.summary").value("닉네임 수정 (MBR-06)"))
-                .andExpect(jsonPath("$.paths['/api/v1/users/me/password'].put.summary").value("비밀번호 변경 (MBR-07)"));
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/password'].put.summary").value("비밀번호 변경 (MBR-07)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/withdrawal'].post.summary").value("회원 탈퇴 (MBR-08)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/withdrawal'].post.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.components.schemas.WithdrawalRequest.properties.password.format").value("password"));
     }
 
     @Test

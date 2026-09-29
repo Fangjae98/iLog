@@ -14,6 +14,8 @@ import com.ilog.ilog.user.dto.PasswordVerificationRequest;
 import com.ilog.ilog.user.dto.PasswordVerificationResponse;
 import com.ilog.ilog.user.dto.SignupRequest;
 import com.ilog.ilog.user.dto.SignupResponse;
+import com.ilog.ilog.user.dto.WithdrawalRequest;
+import com.ilog.ilog.user.dto.WithdrawalResponse;
 import com.ilog.ilog.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -132,5 +134,25 @@ public class UserController {
     public void changePassword(@Login LoginUser loginUser,
                                @Valid @RequestBody PasswordChangeRequest request) {
         userService.changePassword(loginUser.userId(), request.currentPassword(), request.newPassword());
+    }
+
+    @Operation(summary = "회원 탈퇴 (MBR-08)",
+            description = """
+                    비밀번호를 한 번 더 확인하고 탈퇴한다. 비밀번호를 body 로 받아야 해서 DELETE 가 아니라 POST 다.
+
+                    소프트 삭제라 30일 안에는 `POST /api/v1/auth/account-recoveries` 로 복구할 수 있다(U1).
+                    응답의 `recoverableUntil` 을 그대로 안내하면 된다. 탈퇴 직후부터 쓰던 토큰은 401 이 된다(A6).
+                    탈퇴한 회원의 글은 목록·검색·상세에서 숨겨진다(P8).""")
+    @ApiResponse(responseCode = "200", description = "탈퇴 성공. 복구 가능 기한을 돌려준다")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT`(누락) 또는 `PASSWORD_MISMATCH`(비밀번호 불일치)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`UNAUTHORIZED` — 로그인 필요, 토큰 만료·위조, 탈퇴 회원",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "`USER_NOT_FOUND` — 로그인 정보의 회원 번호로 회원을 찾을 수 없다",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/me/withdrawal")
+    public WithdrawalResponse withdraw(@Login LoginUser loginUser,
+                                       @Valid @RequestBody WithdrawalRequest request) {
+        return userService.withdraw(loginUser.userId(), request.password());
     }
 }

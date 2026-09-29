@@ -8,6 +8,7 @@ import com.ilog.ilog.user.dto.NicknameAvailabilityResponse;
 import com.ilog.ilog.user.dto.NicknameUpdateResponse;
 import com.ilog.ilog.user.dto.PasswordVerificationResponse;
 import com.ilog.ilog.user.dto.SignupRequest;
+import com.ilog.ilog.user.dto.WithdrawalResponse;
 import com.ilog.ilog.user.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -264,6 +265,55 @@ class UserControllerTest extends SecuredSliceTestSupport {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("password"));
         verify(userService, never()).verifyPassword(anyLong(), anyString());
+    }
+
+    // ---------- MBR-08 회원 탈퇴 ----------
+
+    @Test
+    void 로그인_없이_탈퇴하면_401() throws Exception {
+        mockMvc.perform(post("/api/v1/users/me/withdrawal")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"Passw0rd!\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    void 탈퇴하면_200과_복구_기한() throws Exception {
+        when(userService.withdraw(1L, "Passw0rd!"))
+                .thenReturn(new WithdrawalResponse(LocalDateTime.of(2026, 10, 28, 10, 0, 0, 123_456_789)));
+
+        mockMvc.perform(post("/api/v1/users/me/withdrawal")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"Passw0rd!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recoverableUntil").value("2026-10-28T10:00:00"));
+    }
+
+    @Test
+    void 탈퇴_비밀번호가_틀리면_400_PASSWORD_MISMATCH() throws Exception {
+        when(userService.withdraw(eq(1L), anyString()))
+                .thenThrow(new BusinessException(ErrorCode.PASSWORD_MISMATCH));
+
+        mockMvc.perform(post("/api/v1/users/me/withdrawal")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"Wrong0!pw\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PASSWORD_MISMATCH"));
+    }
+
+    @Test
+    void 탈퇴_비밀번호가_비어있으면_400() throws Exception {
+        mockMvc.perform(post("/api/v1/users/me/withdrawal")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("password"));
+        verify(userService, never()).withdraw(anyLong(), anyString());
     }
 
     // ---------- MBR-06 닉네임 수정 ----------
