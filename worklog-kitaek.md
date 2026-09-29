@@ -770,9 +770,174 @@ DROP TABLE post_url, post_hashtag, posts;  -- 그다음 서버 재기동
 
 ### 다음 단계
 
-1. `feat/be/handoff`(예시 이메일·prod 프로필·이 일지) PR을 `be`에 머지
+1. ~~`feat/be/handoff`(예시 이메일·prod 프로필·이 일지) PR을 `be`에 머지~~ — 완료 (PR #20)
 2. 인프라가 `nginx.conf` 수정 → `be` → `develop` PR (올리기 직전에 develop을 be로 먼저 머지, 아래 "알아둘 점" 참고)
 3. fe가 프록시·에러 코드·게시글 API 반영 후 로컬에서 실제 연동 확인
+
+---
+
+## 백엔드 구동 방법 (2026-09-29 기준, develop 머지 PR 본문과 같은 내용)
+
+아래 순서대로 하면 처음 받는 컴퓨터에서도 백엔드를 띄울 수 있습니다.
+방법은 두 가지입니다. **API만 확인할 때는 A(Docker로 전부)**, **백엔드 코드를 고치면서 개발할 때는 B(DB만 Docker)** 를 쓰세요.
+
+### 0. 준비물
+
+| 도구 | 필요한 경우 | 설치 확인 |
+|---|---|---|
+| Docker Desktop | A, B 모두 | `docker --version`, `docker compose version` (Docker Desktop이 **실행 중**이어야 함) |
+| JDK 25 | B, 테스트 실행 | `java -version` → `25` 가 보여야 함 |
+| Git | 모두 | `git --version` |
+
+A 방법만 쓸 거면 JDK가 없어도 됩니다(빌드를 컨테이너 안에서 합니다).
+B 방법과 테스트는 `./gradlew`를 실행할 JDK가 컴퓨터에 있어야 하니 **JDK 25**를 설치하세요.
+PostgreSQL은 설치하지 않습니다. 팀 표준은 compose의 `postgres:16` 컨테이너입니다.
+
+### 1. 코드 받기
+
+```bash
+# 처음이면
+git clone https://github.com/Fangjae98/iLog.git
+cd iLog
+
+# 이미 받아 둔 경우
+git switch develop
+git pull
+```
+
+### 2. `.env` 만들기 (저장소 루트, 처음 한 번)
+
+```bash
+cp .env.example .env              # Windows PowerShell: Copy-Item .env.example .env
+openssl rand -base64 48           # JWT 서명 키 생성. 출력된 한 줄을 복사
+```
+
+`.env`를 열어 아래처럼 채웁니다. `.env`는 `.gitignore`에 들어 있어 커밋되지 않습니다.
+
+```dotenv
+# DB 계정 (원하는 영문·숫자. 비밀번호로 "ilog" 는 쓰지 마세요 — 예전 커밋에 공개로 남아 있음)
+POSTGRES_USER=ilog_user
+POSTGRES_PASSWORD=change_me_db_password
+POSTGRES_DB=ilogdb
+
+# 필수. 위에서 openssl 로 만든 값. 비어 있으면 백엔드가 뜨지 않습니다
+JWT_SECRET=paste_generated_secret_here
+
+# 선택. Gmail 주소와 "앱 비밀번호" 16자 (계정 비밀번호 아님)
+MAIL_USERNAME=
+MAIL_PASSWORD=
+```
+값 옆에 주석을 붙이지 말고, 주석은 항상 **따로 한 줄**로 쓰세요.
+
+- 메일 값이 비어 있어도 서버는 뜹니다. 임시 비밀번호 발급(`POST /auth/temporary-passwords`)만 500 `MAIL_SEND_FAILED`로 실패합니다.
+- 팀이 같은 DB 계정을 쓰려면 실제 값은 **팀 채팅으로** 공유하세요. 저장소에 올리면 안 됩니다.
+- `openssl`이 없으면(Windows) 32자 이상의 아무 영문·숫자 문자열을 넣어도 됩니다.
+
+### A. Docker로 DB와 백엔드를 함께 띄우기 (권장)
+
+```bash
+docker compose up -d --build postgres backend
+```
+
+- 첫 실행은 이미지를 받고 Gradle로 빌드하느라 **3~5분** 걸립니다. 다음부터는 몇 초면 됩니다.
+- `--build`는 코드가 바뀌었을 때만 필요합니다. 그냥 다시 켤 때는 `docker compose up -d postgres backend`로 충분합니다.
+- `postgres backend`를 빼고 `docker compose up -d --build`로 실행하면 프론트 컨테이너(80번 포트)까지 함께 뜹니다.
+
+**잘 떴는지 확인**
+```bash
+docker compose ps                 # ilog-postgres (healthy), ilog-backend (Up) 이면 정상
+docker logs -f ilog-backend       # "Started IlogApplication in N seconds" 가 보이면 성공 (Ctrl+C 로 로그 보기 종료)
+```
+
+**끄기 / 다시 켜기 / 초기화**
+```bash
+docker compose stop               # 끄기 (데이터 유지)
+docker compose start              # 다시 켜기
+docker compose down               # 컨테이너 삭제 (데이터는 볼륨에 남음)
+docker compose down -v            # ⚠️ DB 데이터까지 전부 삭제 (완전 초기화할 때만)
+```
+
+### B. DB만 Docker로 띄우고 백엔드는 직접 실행 (개발용)
+
+코드를 고치고 바로 다시 실행하며 개발할 때 씁니다.
+
+**B-1. DB만 켜기**
+```bash
+docker compose stop backend       # A로 띄운 백엔드가 있으면 8080 포트가 겹치므로 먼저 끄기
+docker compose up -d postgres
+```
+
+**B-2. 로컬 설정 파일 만들기 (처음 한 번)**
+```bash
+cd backend/src/main/resources
+cp application-local.properties.example application-local.properties
+# Windows PowerShell: Copy-Item application-local.properties.example application-local.properties
+```
+
+`application-local.properties`를 열어 **`.env`와 같은 값으로** 채웁니다.
+```properties
+# 끝의 DB 이름 = .env 의 POSTGRES_DB
+spring.datasource.url=jdbc:postgresql://localhost:5432/ilogdb
+# = .env 의 POSTGRES_USER
+spring.datasource.username=ilog_user
+# = .env 의 POSTGRES_PASSWORD
+spring.datasource.password=change_me_db_password
+# 32바이트 이상. .env 의 JWT_SECRET 과 같은 값을 써도 됩니다
+ilog.jwt.secret=paste_generated_secret_here
+```
+- 이 파일은 `backend/.gitignore`에 들어 있어 커밋되지 않고, 도커 이미지에도 들어가지 않습니다(`.dockerignore`).
+- **값에는 한글을 쓰지 마세요.** Spring이 `.properties`를 ISO-8859-1로 읽어서 깨집니다(주석은 괜찮음).
+- **값 뒤에 `#` 주석을 붙이면 안 됩니다.** `.properties`는 줄 중간의 `#`을 주석으로 보지 않아 값에 섞여 들어갑니다.
+
+**B-3. 실행**
+```bash
+cd backend                        # 저장소 루트 기준
+./gradlew bootRun                 # Windows PowerShell: .\gradlew.bat bootRun
+```
+- 로그에 `Started IlogApplication`이 보이면 성공입니다. 끌 때는 `Ctrl+C`를 누르세요.
+- IntelliJ나 VS Code에서는 `IlogApplication.main`을 실행해도 됩니다(`local` 프로필이 기본값).
+
+### 3. 동작 확인
+
+**Swagger로 확인 (가장 쉬움)**
+1. http://localhost:8080/swagger-ui.html 을 엽니다.
+2. `POST /api/v1/users` → **Try it out**에서 가입합니다.
+   ```json
+   { "email": "test@example.com", "password": "Test1234!", "name": "테스트", "nickname": "테스트" }
+   ```
+   비밀번호는 8~20자이고 영문·숫자·특수문자(`!@#$%^&*`)가 각 1개 이상 있어야 합니다. 닉네임은 2~10자의 한글·영문·숫자입니다.
+3. `POST /api/v1/auth/tokens`로 로그인하고, 응답의 `accessToken` 값을 복사합니다.
+4. 오른쪽 위 **Authorize** → `bearerAuth` 칸에 토큰을 붙여 넣고 → **Authorize** → **Close**를 누릅니다.
+   - `eyJ`부터 끝까지 **토큰만** 넣으세요. `Bearer `나 따옴표(`"`)를 같이 넣으면 401이 납니다.
+   - 페이지를 새로고침하면 인증이 풀리니 다시 넣어야 합니다.
+5. 자물쇠가 붙은 API(게시글 작성 등)를 실행합니다. 결과의 **Curl** 칸에 `Authorization: Bearer eyJ...`가 보이면 정상입니다.
+
+**터미널로 확인**
+```bash
+curl "http://localhost:8080/api/v1/users/email-availability?email=a@b.com"
+# {"available":true,"reason":null} 이면 백엔드와 DB 연결 정상
+```
+
+### 4. 테스트 실행
+```bash
+cd backend
+./gradlew test                    # Windows: .\gradlew.bat test
+```
+- **Docker Desktop을 켜 둔 상태로 실행하세요.** DB 테스트가 Testcontainers로 `postgres:16`을 직접 띄웁니다. Docker가 꺼져 있으면 DB 테스트가 실패하지 않고 **skip**되니, skip 개수가 1개(성능 측정 도구)보다 많으면 Docker를 확인하세요.
+- 결과 보고서: `backend/build/reports/tests/test/index.html`
+
+### 5. 자주 막히는 곳
+
+| 증상 | 원인 | 해결 |
+|---|---|---|
+| `port 5432 is already allocated` | 로컬에 PostgreSQL이 따로 설치돼 실행 중 | 로컬 PostgreSQL을 끄거나, `docker-compose.yml` 포트를 `"5433:5432"`로 바꾸고 B의 url도 `5433`으로 |
+| `port 8080 is already allocated` / `Port 8080 was already in use` | A의 백엔드 컨테이너와 B의 bootRun이 동시에 뜸 | 하나만 쓰기 (`docker compose stop backend`) |
+| 백엔드 컨테이너가 바로 꺼짐 | `JWT_SECRET`이 비었거나 32바이트 미만 | `.env` 확인 후 `docker compose up -d backend` |
+| `password authentication failed` | DB 계정이 `.env`와 다르거나, 볼륨이 **예전 계정으로** 만들어져 있음 | 값을 맞추기. 계정을 바꿨다면 `docker compose down -v`로 볼륨을 초기화(데이터 삭제) |
+| 게시글 API에서 500 / 제약 오류 | 이번 변경 전에 만든 DB 볼륨이 남아 있음 | `DROP TABLE post_url, post_hashtag, posts;` 실행 후 재기동 (회원 데이터는 유지) |
+| Swagger에서 계속 401 | 토큰을 안 넣었거나, `Bearer`·따옴표가 섞였거나, 첫 글자 `e`가 빠짐 | 3번 "동작 확인"의 4단계 참고. 토큰 유효시간은 2시간 |
+| Windows에서 `docker compose up --build` 실패 (`/bin/sh^M`) | `gradlew` 줄바꿈이 CRLF로 체크아웃됨 | `.gitattributes`가 들어간 뒤 `git rm --cached -r . && git reset --hard`로 다시 체크아웃. ⚠️ 커밋하지 않은 변경은 지워지니 먼저 커밋·백업 |
+| 작성 시각이 9시간 이름 | 예전 이미지(TZ 설정 전)로 실행 중 | `docker compose up -d --build backend`로 다시 빌드 |
 
 ---
 
