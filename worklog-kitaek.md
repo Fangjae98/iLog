@@ -598,6 +598,182 @@ T08까지가 플레이북 세션 1입니다. T09(Post↔User 연관관계)부터
 진행하고, 그때 로컬 DB의 게시글 관련 테이블을 재생성해야 합니다
 (`ddl-auto=update`는 기존 제약을 바꾸지 못합니다).
 
+## 2026-09-29 — 백엔드 마감 (T09~T17) + 배포 설정 보완 + develop·fe 연동 전 점검
+
+작업자: kitaek
+브랜치: `feat/be/finish` → `be` 머지 (PR #17, #18), 이어서 `feat/be/handoff`
+기준 문서: `ilog-backend-work-order.md` (지시서), `CLAUDE.md` (규칙) — 둘 다 커밋하지 않고 로컬 참조용
+상태: 지시서 4장 작업 **전부 완료**. 테스트 **298개 통과 / 1개 skip**(측정 도구, 환경변수로만 실행). Docker 켜고 DB 테스트까지 실제 실행
+
+---
+
+### 이번 작업의 의미
+
+T08까지는 "인증이 닫힌" 상태였고, 게시글은 여전히 옛 형식(PUT 전체 교체, `id`·`userId` 응답, 내 글 전용 목록)이었습니다.
+이번에 **프론트(`feat/fe/init`)가 기대하는 형식에 맞춰 게시글·목록·검색을 다시 짜고**, 탈퇴·복구·30일 삭제까지 회원 생애주기를 닫았습니다.
+`be` → `develop`은 fast-forward라 충돌 없이 올라갑니다.
+
+### 작업별 커밋
+
+| 작업 | 커밋 | 내용 |
+|---|---|---|
+| T09 | `0fbe269` | `Post.userId` → `@ManyToOne User`, FK `ON DELETE CASCADE` (posts·post_hashtag·post_url) |
+| T10 | `424997f` | 회원 탈퇴 `POST /users/me/withdrawal` → 200 `{ recoverableUntil }` |
+| T11 | `ec06bba` | 계정 복구 `POST /auth/account-recoveries` → 204 (활성 계정도 204) |
+| T12 | `85515a2` | 탈퇴 30일 경과 회원 삭제 스케줄러 (매일 04:00, 자식→부모 벌크 삭제) |
+| T13 | `255ff8e` | `PostPolicy` 입력 규칙, 해시태그 정규화(소문자 포함), **PUT → PATCH 부분 수정** |
+| T14 | `0466f7f` | 작성 201 `{ postId }` + `Location`, 상세 `author`·`isMine`, 탈퇴 작성자 글 404 |
+| T15 | `011af1f` | `GET /posts` 하나로 목록·검색·내 글 통합 (Specification) |
+| T16 | `1eb6648` | 인덱스 2개 + pg_trgm GIN 2개, 적용 전후 측정 |
+| T12 보완 | `8c2ddda` | 스케줄러 `Clock`을 JVM 기본 시간대로 (아래 "막힐 뻔한 것" 3번) |
+| T17 | `d905cd5` | 통합 시나리오 3개, Swagger 전 API 기능 ID·401·403·404 점검 테스트 |
+| 리뷰 반영 | `a686178` | 30일 복구 판정을 `User.isRecoverable(now)` 한 곳으로 |
+| 배포 설정 | `e946f12` | Dockerfile `TZ=Asia/Seoul`, `.dockerignore`에 `application-local.properties` |
+| 공개 저장소 정리 | `57829ee` | 예시 이메일을 example 도메인으로, `application-prod.properties`(Swagger 차단) |
+
+### 막힐 뻔한 것 4가지
+
+**1. 같은 해시태그를 다시 보내면 UNIQUE 위반 (T13)**
+
+처음엔 태그를 "전부 비우고 다시 담기"로 교체했는데, Hibernate가 **새 태그 INSERT를 고아 삭제(DELETE)보다 먼저** 실행해서
+`UNIQUE(post_id, name)`에 걸렸습니다(`duplicate key ... (5, spring)`). 테스트가 잡았습니다.
+→ 빠진 태그만 지우고 새 태그만 더하도록 바꿨습니다(`Post.replaceHashtags`).
+
+**2. `isMine`이 JSON에서 `mine`으로 나갈 뻔함 (T14)**
+
+record의 `isMine()`을 Jackson이 is-getter로 보고 `mine`으로 이름 붙일 수 있습니다.
+`@JsonProperty("isMine")`로 고정하고, `$.mine`이 없는 것까지 테스트로 확인했습니다.
+
+**3. 컨테이너는 UTC라 시각이 9시간 어긋남 (T12 보완, 배포 설정)**
+
+`docker compose`로 띄우니 KST 12:09에 쓴 글의 `createdAt`이 `03:09`였습니다.
+코드의 `LocalDateTime.now()`가 JVM 기본 시간대(컨테이너 = UTC)를 따르기 때문입니다.
+T12에서 스케줄러 `Clock`만 KST로 고정했더니 저장 값(UTC)과 비교가 9시간 틀어지는 문제도 생겼습니다.
+→ `Clock`은 JVM 기본 시간대로 되돌리고(비교 기준 일치), 컨테이너에 `TZ=Asia/Seoul`을 넣어 서비스 시각을 KST로 맞췄습니다.
+다시 빌드해 `createdAt`이 KST 현재 시각과 같은 것을 확인했습니다.
+
+**4. 로컬 비밀 설정이 도커 이미지에 들어가고 있었음 (배포 설정)**
+
+`backend/Dockerfile`이 `COPY . .`인데 `.dockerignore`에 `application-local.properties`가 없어서,
+로컬에서 이미지를 빌드하면 **JWT 키·DB 비밀번호가 jar 안에 그대로** 들어갔습니다(jar를 꺼내 확인).
+→ `.dockerignore`에 추가. 새 이미지 jar에 파일이 없고, 서버는 compose 환경변수만으로 뜨는 것을 확인했습니다.
+
+### T16 측정 (회원 20명 · 글 1만 건 · 태그 22,667건, 로컬 Testcontainers PostgreSQL 16)
+
+`ILOG_MEASURE=true ./gradlew test --tests '*PostQueryMeasurementTest'` → `build/reports/measure/post-query.md`.
+한 번 실행으로 인덱스를 지운 상태(전)와 다시 만든 상태(후)를 같은 데이터에서 잽니다.
+
+| 조회 | SQL 횟수 | 본문 쿼리 전 → 후 (ms) | count 쿼리 전 → 후 (ms) |
+|---|---|---|---|
+| 전체 목록 1페이지 | 3 | 2.719 → **0.018** | 1.397 → 1.425 |
+| 전체 목록 500페이지 | 3 | 4.298 → **1.258** | 1.363 → 1.359 |
+| 내 글 1페이지 | 3 | 0.444 → **0.024** | 0.368 → 0.159 |
+| 태그 2개 AND | 3 | 0.622 → 0.676 | 0.535 → 0.609 |
+| 키워드 3글자, 흔함(20%) | 3 | 12.171 → **0.072** | 11.944 → **2.702** |
+| 키워드 3글자, 드묾(0.1%) | 3 | 11.686 → **0.037** | 11.711 → **0.033** |
+
+- SQL 횟수는 본문 + count + 태그 IN = 3회. 결과가 쪽 크기보다 적으면 count를 생략합니다. `PostSearchQueryCountTest`가 계속 지킵니다.
+- DB 로케일 `en_US.utf8`(테스트 컨테이너·로컬 compose DB 둘 다 확인), `show_trgm('스프링')`이 조각을 돌려줘서 trigram 적용.
+- 지연 조인은 **적용 안 함**. 500페이지가 1.26ms라 "크게 느릴 때만" 조건에 해당하지 않습니다.
+- 한계: 2글자 이하 검색어("자바")는 trigram 효과가 거의 없습니다.
+
+### 지시서와 다르게 간 것
+
+| # | 지시서 | 실제 | 근거 |
+|---|---|---|---|
+| 1 | 스케줄러 `Clock` (KST 명시는 없음) | `Clock.systemDefaultZone()` | 저장 시각과 같은 기준이어야 30일 비교가 맞음. KST는 실행 환경(TZ)으로 |
+| 2 | — | 목록·검색 요약 `(PST-02, FN-PST-006)` | 지시서 ID(PST-02)와 기존 코드 ID(FN-PST-006)를 함께 적음 |
+| 3 | 로그인 요약 "로그인 (토큰 발급)" | "로그인 (AUTH-01)" | T17-2 "모든 API에 기능 ID". 기존 문서 테스트 기대값도 같이 바꿈 |
+| 4 | T17-4 be→develop→main 머지 | 하지 않음 | 머지는 사람이 함 |
+
+### 검증한 것
+
+| 항목 | 결과 |
+|---|---|
+| Docker 켠 상태 전체 테스트 | **298개 통과 / 실패 0 / skip 1**(측정 도구) |
+| 통합 시나리오 3개 (T17-1) | **통과** — 가입→작성→검색→로그아웃 / 임시PW→비번 변경→같은 토큰 계속 사용 / 탈퇴→403→복구→로그인 |
+| `docker compose up -d --build backend` | **기동**, 인덱스 5개와 FK CASCADE(`confdeltype = c`) 생성 확인 |
+| compose 백엔드에 curl | 가입 201 → 작성 201 + `Location` → 태그·날짜 검색 → 상세 `isMine` |
+| 코드 리뷰(high) 9건 | 2건 반영(복구 판정 중복, 낡은 주석), 1건 오탐(이중 JOIN — 실제 SQL은 JOIN 1회), 나머지는 아래 "팀에 공유할 것"으로 |
+| `local,prod` 프로필 | `/v3/api-docs`·Swagger UI **404**, 공개 API 200 |
+| nginx 프록시 재현 (아래 fe 1번) | 끝에 `/` 있으면 **401**, 빼면 **200** |
+
+### 아직 확인하지 못한 것
+
+| 항목 | 상태 |
+|---|---|
+| Docker 끈 상태의 skip 동작 | **미확인** — 쓰던 Docker를 멈춰야 해서 이번엔 다시 돌리지 않음 (9/28에 확인됨) |
+| 실제 메일 발송 | **미확인** — 여전히 `JavaMailSender` 목으로만 검증 |
+| 프론트와 실제 연동 | **미확인** — 아래 fe 1·2번이 먼저 고쳐져야 가능 |
+
+### develop·fe 연동 전 점검 결과
+
+`be` → `develop`은 fast-forward(develop 쪽 새 커밋 0개)라 **충돌이 없습니다**.
+저장소가 **공개(public)** 라서 이력에 남은 값까지 봤습니다.
+
+**보안 점검**
+
+| 항목 | 결과 |
+|---|---|
+| `.env`, `application-local.properties` 커밋 이력 | **없음** |
+| 빌드 산출물(`.class`, `.jar`, `build/`) 이력 | **없음** (`feat/auth-foundation` 쪽 문제는 be에 안 들어옴) |
+| 현재 코드·작업 일지의 비밀 값 | **없음**. 테스트용 JWT 키(`test-only-...`)만 있음 |
+| 이력의 옛 DB 비밀번호 `ilog` (`2c9ca60`) | 공개 이력에 남아 있음. 현재 `.env` 값과는 다름 → **배포 DB에 `ilog` 금지** |
+| 실제 주소처럼 보이는 예시 이메일 | `57829ee`에서 example 도메인으로 교체 |
+
+**주소 문제는 누가 고치나**
+
+| 문제 | 파일 주인 | 판단 |
+|---|---|---|
+| nginx가 `/api`를 떼고 전달 | `frontend/nginx.conf` — Infra 커밋 `fcaa61e`(박창재) | **인프라가 고침.** 백엔드가 `/v1/...`도 받게 우회하면 경로가 두 벌이 되고, `CLAUDE.md`상 `frontend/`는 우리가 수정하지 않음 |
+| 로컬 개발 프록시 없음 | `frontend/vite.config.js` — fe | **fe가 고침.** `feat/fe/init`에 이미 있는 설정을 옮기면 됨. 백엔드는 CORS를 넣지 않는 게 지시서 결정(T02-4) |
+
+### 팀에 공유할 것
+
+**인프라(develop)에 줄 것 — be가 바꾼 루트·배포 파일**
+
+| 파일 | 변경 | 인프라가 할 일 |
+|---|---|---|
+| `.env.example` | `JWT_SECRET`, `MAIL_USERNAME`, `MAIL_PASSWORD` 추가 | 각자 `.env`에 채우기. `JWT_SECRET`이 비면 백엔드가 안 뜸(`openssl rand -base64 48`). 실제 값은 팀 채팅으로 |
+| `docker-compose.yml` | backend에 위 3개 환경변수 전달 | 배포 시 `SPRING_PROFILES_ACTIVE=prod` 추가 (Swagger 차단) |
+| `backend/Dockerfile` | `ENV TZ=Asia/Seoul` | 없음 |
+| `backend/.dockerignore` | `application-local.properties` 제외 | 없음 |
+| `backend/src/main/resources/application-prod.properties` | 신규. Swagger·api-docs 끔 | 위 `SPRING_PROFILES_ACTIVE=prod` |
+| `backend/src/main/resources/db/indexes.sql` | 신규. 기동 때마다 `CREATE EXTENSION pg_trgm` + GIN 인덱스 | 배포 DB 계정에 확장 생성 권한(DB 소유자면 됨)이 없으면 **서버가 안 뜸** |
+| `.gitignore` | `.vscode/` → `.vscode/*` + 공용 설정 2개 예외 | 없음 |
+| `.editorconfig`, `.gitattributes`, `.vscode/` | 신규 (9/21 개발환경 정리) | 없음 |
+| `frontend/nginx.conf` (인프라 파일) | **수정 필요** | `proxy_pass http://backend:8080/;` → `proxy_pass http://backend:8080;` (끝의 `/` 제거) |
+
+그리고 **기존 DB 볼륨이 있으면 게시글 테이블을 다시 만들어야 합니다** (`ddl-auto=update`는 FK CASCADE·UNIQUE·길이를 바꾸지 못함).
+```sql
+DROP TABLE post_url, post_hashtag, posts;  -- 그다음 서버 재기동
+```
+
+**fe에 줄 것**
+
+1. **🔴 nginx 프록시** — 위 인프라 표 마지막 줄. 지금은 `/api/v1/users` → 백엔드엔 `/v1/users`로 가서 **모든 API가 401**, fe 인터셉터가 세션을 지우고 로그인으로 보냄.
+2. **🔴 `vite.config.js` 프록시** — `feat/fe/init`의 설정을 옮기기.
+   ```js
+   server: { proxy: { '/api': { target: 'http://localhost:8080', changeOrigin: true } } },
+   ```
+3. **에러 코드 이름** (`constants/errorMessages.js`)
+   - `MEMBER_NOT_MATCHED` → `USER_NOT_FOUND`, `PASSWORD_RECENTLY_USED` → `PASSWORD_REUSED`,
+     `NICKNAME_SAME_AS_CURRENT` → `NICKNAME_UNCHANGED`, `POST_NOT_OWNED` → `POST_NOT_OWNER`
+   - 추가: `TEMP_PASSWORD_EXPIRED`, `HASHTAG_LIMIT_EXCEEDED`, `MAIL_SEND_FAILED`
+   - 서버에 없음(지워도 됨): `PASSWORD_CONFIRM_MISMATCH`, `HASHTAG_NOT_FOUND`, `TOKEN_EXPIRED`
+4. **입력 규칙** (`constants/rules.js`) — 내용 1000자, URL 5개, 해시태그 10개, 해시태그 길이 **20**(`#` 떼고 소문자로 바꾼 뒤)
+5. **아직 없는 연결**
+   - 게시글 API 전체: 수정 `PATCH`(PUT은 405), 작성 응답 `data.postId`, 목록 항목 `post.postId`, 상세 `post.author.nickname`·`post.isMine`
+   - 복구: 로그인 403 `USER_WITHDRAWN` → `POST /auth/account-recoveries { email, password }`(204) → 로그인 화면
+   - 로그아웃: 지금은 서버를 안 부름. 동작엔 문제 없음(선택)
+6. **이미 맞는 것** — 로그인 응답, 비밀번호 변경 `PUT`, 탈퇴 `POST /users/me/withdrawal`, 이메일 확인 `DUPLICATE`/`WITHDRAWN`, 해시태그 반복 파라미터(`paramsSerializer: { indexes: null }`)
+
+### 다음 단계
+
+1. `feat/be/handoff`(예시 이메일·prod 프로필·이 일지) PR을 `be`에 머지
+2. 인프라가 `nginx.conf` 수정 → `be` → `develop` PR (올리기 직전에 develop을 be로 먼저 머지, 아래 "알아둘 점" 참고)
+3. fe가 프록시·에러 코드·게시글 API 반영 후 로컬에서 실제 연동 확인
+
 ---
 
 ## 결정이 필요한 것
@@ -626,7 +802,12 @@ T08까지가 플레이북 세션 1입니다. T09(Post↔User 연관관계)부터
 프론트가 `UNAUTHORIZED`일 때만 세션을 지우도록 짜여 있어 `TOKEN_EXPIRED`를 쓰면
 만료 토큰이 남아 요청이 계속 실패합니다. 회원 API의 Swagger 설명도 함께 정리했습니다.
 
-### 4. `GET /api/v1/posts` 경로 충돌 (2026-09-21)
+### 4. ~~`GET /api/v1/posts` 경로 충돌 (2026-09-21)~~ — 해결됨 (2026-09-29, T15)
+
+지시서 S1대로 목록·검색·내 글을 **핸들러 하나**로 합쳐서 병합 문제 자체가 없어졌습니다.
+내 글은 `author=me`(또는 `nickname`) 조건입니다. 아래는 당시 기록입니다.
+
+
 
 A 담당 목록·검색 API가 같은 `GET /api/v1/posts`로 들어오면,
 springdoc이 두 핸들러를 **하나의 operation으로 병합**합니다.
@@ -648,7 +829,18 @@ A의 목록 API에도 붙어버립니다. 어노테이션으로는 못 막고 �
 | CI | `.github/workflows`도 `Jenkinsfile`도 없음. 누가 깨뜨려도 머지 전에 모름 |
 | DB 마이그레이션 | `ddl-auto=update`. Flyway·Liquibase 없어서 컬럼 삭제·타입 변경이 반영되지 않음 |
 | `feat/auth-foundation` | `backend/.gradle/`·`backend/build/`·`.DS_Store` 등 빌드 산출물 30개가 커밋되어 있음. develop에 머지되면 따라 들어옴 |
-| dev 모드 프론트↔백 연결 | `vite.config.js`에 `server.proxy` 없고 백엔드에 CORS 설정도 없음. `nginx.conf`의 `/api` 프록시는 컨테이너 경로에만 있음 |
+| dev 모드 프론트↔백 연결 | `vite.config.js`에 `server.proxy` 없고 백엔드에 CORS 설정도 없음. `nginx.conf`의 `/api` 프록시는 컨테이너 경로에만 있음 **(2026-09-29 재확인: 여전히 없음. nginx는 `/api`를 떼고 전달하는 문제도 있음 → 9/29 "팀에 공유할 것")** |
+
+### 6. 임시 비밀번호 발급 남용 (2026-09-29)
+
+이메일과 이름만 알면 누구나 `POST /auth/temporary-passwords`를 부를 수 있고, **발송 즉시 기존 비밀번호가 바뀝니다**(U8대로 구현).
+요청 횟수 제한이 없어서 남의 계정을 계속 초기화하는 장난이 가능합니다.
+배포 전에 요청 제한(같은 이메일 N분에 1회 등)이나 "발급 후에도 기존 비밀번호 유지" 중 하나를 정해야 합니다.
+
+### 7. 배포 DB 스키마 관리 (2026-09-29)
+
+`ddl-auto=update`는 컬럼·제약 변경을 반영하지 못해 이번에도 게시글 테이블 재생성이 필요했습니다.
+배포 전에 Flyway 도입 또는 `validate` 전환 여부를 정해야 합니다.
 
 ---
 

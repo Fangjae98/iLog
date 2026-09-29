@@ -15,7 +15,7 @@ public record TemporaryPasswordResponse(
 
     /**
      * {@code @} 앞 첫 글자 + {@code ***} + {@code @도메인} (U8).
-     * 예: {@code parkkitaek@gmail.com} → {@code p***@gmail.com}
+     * 예: {@code hong.gildong@example.com} → {@code h***@example.com}
      */
     public static TemporaryPasswordResponse of(String email) {
         return new TemporaryPasswordResponse(mask(email));
