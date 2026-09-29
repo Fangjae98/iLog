@@ -10,10 +10,10 @@ class TemporaryPasswordResponseTest {
 
     @ParameterizedTest
     @CsvSource({
-            "parkkitaek@gmail.com, p***@gmail.com",
+            "hong.gildong@example.co.kr, h***@example.co.kr",
             "user@example.com,     u***@example.com",
             "a@b.com,              a***@b.com",          // 로컬 파트가 1글자여도 길이를 드러내지 않는다
-            "kim.tae-k@naver.com,  k***@naver.com"
+            "kim.tae-k@example.org,  k***@example.org"
     })
     void 이메일은_첫_글자만_남기고_가린다(String email, String expected) {
         assertThat(TemporaryPasswordResponse.of(email).email()).isEqualTo(expected);
