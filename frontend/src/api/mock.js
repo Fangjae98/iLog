@@ -128,8 +128,8 @@ export const mockUser = {
     await delay()
     const guard = requireLogin(); if (guard) return guard
     const u = me()
-    if (nickname === u.nickname) return fail(400, 'NICKNAME_SAME_AS_CURRENT', { nickname: '지금 쓰고 있는 닉네임입니다' })
-    if (db.users.some((x) => x.nickname === nickname)) return fail(400, 'NICKNAME_DUPLICATED', { nickname: '이미 사용 중입니다' })
+    if (nickname === u.nickname) return fail(400, 'NICKNAME_UNCHANGED', { nickname: '지금 쓰고 있는 닉네임입니다' })
+    if (db.users.some((x) => x.nickname === nickname)) return fail(409, 'USER_DUPLICATE_NICKNAME', { nickname: '이미 사용 중입니다' })
     u.nickname = nickname
     return { userId: u.userId, nickname }
   },
