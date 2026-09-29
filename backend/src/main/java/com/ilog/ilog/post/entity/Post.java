@@ -22,8 +22,15 @@ import lombok.Getter;
 // JPA는 내부적으로 엔티티를 다룰 때 기본 생성자가 필수입니다.
 import lombok.NoArgsConstructor;
 
+// 작성자(회원) 엔티티입니다. 게시글은 회원 한 명에게 속합니다.
+import com.ilog.ilog.user.domain.User;
+
 // Hibernate(JPA 구현체): 연관된 데이터를 한 번에 모아서 조회하게 해 주는 어노테이션입니다.
 import org.hibernate.annotations.BatchSize;
+
+// Hibernate: 부모 행이 지워질 때 DB가 자식 행도 함께 지우도록 FK에 ON DELETE CASCADE를 붙여 줍니다.
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 // 여러 개의 값을 순서대로 담는 목록(List)과 그 기본 구현체(ArrayList)입니다. URL 여러 개를 담을 때 씁니다.
 import java.util.ArrayList;
@@ -50,10 +57,13 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     @GeneratedValue(strategy = GenerationType.IDENTITY)   // 번호는 우리가 넣지 않고 DB가 1, 2, 3... 자동으로 매김
     private Long id;
 
-    // 글쓴이의 회원 번호. 지금은 숫자만 저장하고,
-    // TODO User 엔티티(B 담당, feat/be/user-revise)가 be에 합쳐지면 @ManyToOne 연관관계로 교체 예정
-    @Column(name = "user_id", nullable = false)           // 자바 필드명은 userId, DB 컬럼명은 user_id / NOT NULL
-    private Long userId;
+    // 글쓴이. @ManyToOne = "글 여러 개 → 회원 한 명" (P9)
+    // fetch = LAZY : 글을 조회할 때 회원까지 자동으로 불러오지 않음. 닉네임이 필요한 조회만 따로 함께 가져온다
+    // @OnDelete     : DB FK에 ON DELETE CASCADE → 회원 행이 지워지면 그 회원의 글도 DB가 함께 지운다 (U4 스케줄러)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)       // posts 표의 user_id 컬럼으로 연결 / NOT NULL
+    @OnDelete(action = OnDeleteAction.CASCADE)
+    private User user;
 
     @Column(nullable = false, length = 100)               // VARCHAR(100) NOT NULL
     private String title;
@@ -72,7 +82,9 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     // @CollectionTable    : 그 표의 이름(post_url)과, 어느 글의 URL인지 가리키는 컬럼(post_id)
     // @OrderColumn        : 사용자가 입력한 순서를 기억하는 컬럼(sort_order). 없으면 조회할 때 순서가 섞일 수 있음
     // 게시글을 저장·삭제하면 URL도 같이 저장·삭제된다.
+    // @OnDelete : DB에서 글 행이 직접 지워질 때(회원 삭제 CASCADE)도 URL이 함께 지워지게 FK에 CASCADE를 붙인다.
     @ElementCollection
+    @OnDelete(action = OnDeleteAction.CASCADE)
     @CollectionTable(name = "post_url", joinColumns = @JoinColumn(name = "post_id"))
     @OrderColumn(name = "sort_order")
     @Column(name = "url", nullable = false, columnDefinition = "TEXT")
@@ -92,8 +104,8 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
     // @Builder 덕분에 Post.builder().title("...").build() 형태로 호출.
     // id와 작성/수정일은 DB와 JPA가 채우므로 파라미터에서 뺐다.
     @Builder
-    private Post(Long userId, String title, String content, List<String> urls, List<String> hashtags) {
-        this.userId = userId;
+    private Post(User user, String title, String content, List<String> urls, List<String> hashtags) {
+        this.user = user;
         this.title = title;
         this.content = content;
         // 받은 목록을 그대로 쓰지 않고 새 목록에 복사 → 바깥에서 원본 목록을 바꿔도 엔티티에 영향 없음
@@ -134,7 +146,8 @@ public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속
 
     /** 이 글을 쓴 사람이 맞는지 확인한다. 수정·삭제 전에 Service에서 호출한다. */
     public boolean isOwner(Long userId) {
-        return this.userId.equals(userId);
+        // LAZY 프록시여도 getId()는 추가 SELECT 없이 id를 돌려준다
+        return user.getId().equals(userId);
     }
 
     /** 응답을 만들 때 쓰기 편하도록 태그 객체 목록을 이름 목록으로 바꿔 준다. (예: ["여행", "맛집"]) */

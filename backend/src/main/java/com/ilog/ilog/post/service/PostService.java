@@ -8,6 +8,7 @@ import com.ilog.ilog.post.dto.PostResponse;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.entity.Post;
 import com.ilog.ilog.post.repository.PostRepository;
+import com.ilog.ilog.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -43,6 +44,7 @@ public class PostService {
 
     // new PostRepository() 하지 않아도 Spring이 만들어 둔 구현체를 넣어 준다.
     private final PostRepository postRepository;
+    private final UserRepository userRepository;
 
     /**
      * 게시글 작성
@@ -57,7 +59,9 @@ public class PostService {
         List<String> hashtags = refineHashtags(request.hashtags());
 
         // 2. DTO → Entity 변환 (아직 DB에 저장되기 전, id가 없는 상태)
-        Post post = request.toEntity(userId, hashtags);
+        // getReferenceById : 회원을 SELECT 하지 않고 id만 담은 참조(프록시)를 만든다.
+        // 글을 저장할 때 user_id 값만 있으면 되므로 회원 전체를 조회할 필요가 없다. (P9)
+        Post post = request.toEntity(userRepository.getReferenceById(userId), hashtags);
 
         // 3. DB에 저장 → INSERT 실행.
         //    이 순간 DB가 id를 매기고, created_at이 자동으로 채워진다.

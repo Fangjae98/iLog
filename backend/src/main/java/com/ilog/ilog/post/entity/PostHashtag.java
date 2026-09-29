@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 /*
  * [게시글 작성 흐름] ⑤ Entity (해시태그)  ← 지금 이 파일
@@ -37,8 +39,10 @@ public class PostHashtag {
 
     // 이 태그가 어느 글의 것인지. @ManyToOne = "태그 여러 개 → 글 하나"
     // fetch = LAZY : 태그를 조회할 때 글까지 자동으로 같이 불러오지 않음 (필요할 때만 조회 → 불필요한 SQL 방지)
+    // @OnDelete : DB에서 글 행이 직접 지워지면(회원 삭제 CASCADE) 태그도 DB가 함께 지운다
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "post_id", nullable = false)   // post_hashtag 표의 post_id 컬럼으로 연결
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Post post;
 
     // 태그 이름. '#'은 빼고 글자만 저장한다. (예: "#여행" → "여행")

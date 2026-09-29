@@ -1,6 +1,7 @@
 package com.ilog.ilog.post.dto;
 
 import com.ilog.ilog.post.entity.Post;
+import com.ilog.ilog.user.domain.User;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -61,14 +62,14 @@ public record PostCreateRequest(
 ) {
 
     // DTO → Entity 변환. Service에서 호출한다.
-    // userId는 요청 JSON이 아니라 로그인 정보에서 꺼내 넘겨받는다.
+    // 작성자(user)는 요청 JSON이 아니라 로그인 정보의 회원 번호로 Service가 만들어 넘긴다.
     // (JSON으로 받으면 남의 회원 번호를 넣어서 대신 글을 쓸 수 있기 때문)
     //
     // hashtags를 파라미터로 따로 받는 이유:
     //   Service에서 '#' 제거·중복 제거 등으로 다듬은 태그 목록을 넘겨주기 때문.
-    public Post toEntity(Long userId, List<String> refinedHashtags) {
+    public Post toEntity(User user, List<String> refinedHashtags) {
         return Post.builder()
-                .userId(userId)
+                .user(user)
                 .title(title)
                 .content(content)
                 .urls(urls)
