@@ -48,7 +48,18 @@ import java.util.List;
  * 이 클래스를 바탕으로 JPA가 INSERT/SELECT 같은 SQL을 대신 만들어 준다.
  */
 @Entity                       // "이 클래스는 DB 테이블과 연결된 엔티티다"라고 JPA에게 알려줌
-@Table(name = "posts")        // 연결할 테이블 이름. 없으면 클래스명(post)을 그대로 씀
+@Table(
+        name = "posts",           // 연결할 테이블 이름. 없으면 클래스명(post)을 그대로 씀
+        // 인덱스 = 책의 색인. 목록은 항상 "최신순"이라 정렬 순서 그대로 색인을 만들어 두면
+        // DB가 전체 글을 정렬하지 않고 색인 앞에서부터 필요한 만큼만 읽는다. (T16 측정 결과는 PR 참고)
+        indexes = {
+                // 전체 목록: ORDER BY created_at DESC, id DESC
+                @Index(name = "idx_posts_created", columnList = "created_at DESC, id DESC"),
+                // 내 글·닉네임 조회: WHERE user_id = ? + 같은 정렬을 한 색인으로 처리한다.
+                // user_id 하나짜리 색인은 만들지 않는다. 이 색인의 앞부분이 그 역할을 대신한다
+                @Index(name = "idx_posts_user_created", columnList = "user_id, created_at DESC, id DESC")
+        }
+)
 @Getter                       // 값을 읽는 getId(), getTitle()... 자동 생성
 @NoArgsConstructor(access = AccessLevel.PROTECTED)   // JPA 전용 기본 생성자. protected라 우리 코드에서는 new Post() 불가 → 빌더로만 생성
 public class Post extends BaseTimeEntity {           // BaseTimeEntity를 상속 → created_at, updated_at 컬럼이 자동으로 따라옴
