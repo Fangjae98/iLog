@@ -1,0 +1,36 @@
+# 줄바꿈(개행) 규칙입니다.
+# 팀원마다 core.autocrlf 설정이 달라도 저장소 안의 내용과 작업 트리가 같아지도록 맞춥니다.
+# 이 파일의 규칙이 각자의 git 설정보다 우선합니다.
+
+# 기본: 저장소에는 LF 로 저장하고, 체크아웃할 때도 LF 로 내려줍니다.
+* text=auto eol=lf
+
+# 리눅스 컨테이너 안에서 실행되는 스크립트는 반드시 LF 여야 합니다.
+# gradlew 가 CRLF 로 체크아웃되면 docker compose up --build 가
+# "/bin/sh^M: bad interpreter" 로 죽습니다.
+gradlew        text eol=lf
+*.sh           text eol=lf
+
+# Windows 배치 파일은 cmd.exe 가 CRLF 를 요구합니다.
+*.bat          text eol=crlf
+*.cmd          text eol=crlf
+*.ps1          text eol=crlf
+
+# 텍스트지만 diff 를 볼 수 있게 유지합니다.
+*.svg          text eol=lf
+
+# 바이너리: 줄바꿈 변환도 diff 도 하지 않습니다.
+*.jar          binary
+*.war          binary
+*.zip          binary
+*.png          binary
+*.jpg          binary
+*.jpeg         binary
+*.gif          binary
+*.ico          binary
+*.woff         binary
+*.woff2        binary
+*.pdf          binary
+
+# 생성물이라 GitHub PR 에서 기본으로 접어 둡니다.
+frontend/package-lock.json  linguist-generated=true

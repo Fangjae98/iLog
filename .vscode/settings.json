@@ -1,0 +1,41 @@
+{
+  // ── Java / Gradle ────────────────────────────────────────────────
+  // build.gradle 이 바뀌면 클래스패스를 자동으로 다시 읽습니다.
+  // 기본값 "interactive" 는 동기화 알림을 한 번 놓치면 클래스패스가 옛날 것으로 남아,
+  // ./gradlew compileJava 는 성공하는데 에디터에만
+  // "The import io.swagger cannot be resolved" 같은 가짜 오류가 뜹니다.
+  "java.configuration.updateBuildConfiguration": "automatic",
+
+  // Gradle 프로젝트가 저장소 루트가 아니라 backend/ 아래에 있습니다. 기본값은 false 입니다.
+  "gradle.nestedProjects": true,
+
+  // 프로젝트에 인코딩 설정이 없으면 워크스페이스 기본 인코딩을 따르게 합니다.
+  "java.project.encoding": "setDefault",
+
+  // ── 파일 저장 규칙 ───────────────────────────────────────────────
+  // .editorconfig 와 같은 내용입니다.
+  // EditorConfig 확장이 없어도 VS Code 만으로 동작하도록 함께 둡니다.
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "[bat]": { "files.eol": "\r\n" },
+  "[markdown]": { "files.trimTrailingWhitespace": false },
+
+  // ── 검색 · 파일 감시에서 빌드 산출물 제외 ────────────────────────
+  "files.watcherExclude": {
+    "**/backend/build/**": true,
+    "**/backend/.gradle/**": true,
+    "**/frontend/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/backend/build": true,
+    "**/backend/.gradle": true,
+    "**/frontend/node_modules": true,
+    "**/frontend/package-lock.json": true
+  }
+
+  // java.configuration.runtimes 는 JDK 경로가 컴퓨터마다 달라서 여기에 넣지 않습니다.
+  // 각자 사용자 설정(User Settings JSON)에 등록하세요.
+  // 방법은 worklog-kitaek.md 의 "IDE 설정 (VS Code)" 항목에 있습니다.
+}
