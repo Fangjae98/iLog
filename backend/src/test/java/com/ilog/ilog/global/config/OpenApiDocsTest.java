@@ -1,0 +1,345 @@
+package com.ilog.ilog.global.config;
+
+import com.ilog.ilog.auth.controller.AuthController;
+import com.ilog.ilog.auth.service.AuthService;
+import com.ilog.ilog.auth.service.TemporaryPasswordService;
+import com.ilog.ilog.post.controller.PostController;
+import com.ilog.ilog.post.service.PostService;
+import com.ilog.ilog.user.controller.UserController;
+import com.ilog.ilog.user.service.UserService;
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Test;
+import org.springdoc.core.configuration.SpringDocConfiguration;
+import org.springdoc.core.configuration.SpringDocSpecPropertiesConfiguration;
+import org.springdoc.core.properties.SpringDocConfigProperties;
+import org.springdoc.core.properties.SwaggerUiConfigProperties;
+import org.springdoc.core.properties.SwaggerUiOAuthProperties;
+import org.springdoc.webmvc.core.configuration.SpringDocWebMvcConfiguration;
+import org.springdoc.webmvc.ui.SwaggerConfig;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.ilog.ilog.support.SecuredSliceTestSupport;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Swagger 문서가 의도대로 만들어지는지 확인한다. DB 없이 돌도록 컨트롤러 슬라이스에 springdoc 만 얹었다.
+ * 새 도메인 컨트롤러를 문서에서 확인하려면 아래 목록에 추가하고 필요한 서비스를 @MockitoBean 으로 채운다.
+ * (Post 가 그 예다 — PostController 를 넣고 PostService 를 목으로 채웠다)
+ */
+@WebMvcTest({UserController.class, PostController.class, AuthController.class})
+@Import(OpenApiConfig.class)
+@ImportAutoConfiguration({
+        SpringDocConfiguration.class, SpringDocConfigProperties.class, SpringDocSpecPropertiesConfiguration.class,
+        SpringDocWebMvcConfiguration.class,
+        SwaggerConfig.class, SwaggerUiConfigProperties.class, SwaggerUiOAuthProperties.class
+})
+class OpenApiDocsTest extends SecuredSliceTestSupport {
+
+    private static final String DOCS = "/v3/api-docs";
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    UserService userService;
+
+    @MockitoBean
+    PostService postService;
+
+    @MockitoBean
+    AuthService authService;
+
+    @MockitoBean
+    TemporaryPasswordService temporaryPasswordService;
+
+    @Test
+    void 문서_정보() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.info.title").value("iLog API"))
+                .andExpect(jsonPath("$.info.version").value("v1"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
+                .andExpect(jsonPath("$.tags[?(@.name=='User')].description").value("회원"))
+                .andExpect(jsonPath("$.tags[?(@.name=='Post')].description").value("게시글"))
+                .andExpect(jsonPath("$.tags[?(@.name=='Auth')].description").value("인증"));
+    }
+
+    @Test
+    void 계정_복구는_공개_API로_문서화된다() throws Exception {
+        String recovery = "$.paths['/api/v1/auth/account-recoveries'].post";
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(recovery + ".summary").value("탈퇴 계정 복구 (AUTH-04)"))
+                .andExpect(jsonPath(recovery + ".security").doesNotExist())
+                .andExpect(jsonPath(recovery + ".responses['204']").exists())
+                .andExpect(jsonPath("$.components.schemas.AccountRecoveryRequest.properties.password.format").value("password"));
+    }
+
+    @Test
+    void 회원_API_7개가_문서에_나온다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/users'].post.summary").value("회원가입 (MBR-01)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/email-availability'].get.summary").value("이메일 사용 가능 확인 (MBR-02)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/nickname-availability'].get.summary").value("닉네임 사용 가능 확인 (MBR-03)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/password-verification'].post.summary").value("비밀번호 재확인 + 개인정보 조회 (MBR-05)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.summary").value("닉네임 수정 (MBR-06)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/password'].put.summary").value("비밀번호 변경 (MBR-07)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/withdrawal'].post.summary").value("회원 탈퇴 (MBR-08)"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/withdrawal'].post.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.components.schemas.WithdrawalRequest.properties.password.format").value("password"));
+    }
+
+    @Test
+    void 비밀번호_변경은_인증이_필요하고_확인값_필드는_문서에_없다() throws Exception {
+        String changePassword = "$.paths['/api/v1/users/me/password'].put";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(changePassword + ".security[0].bearerAuth").exists())
+                .andExpect(jsonPath(changePassword + ".responses['204']").exists())
+                // newPasswordConfirm 은 프론트 전용이라 서버 DTO 에 없다
+                .andExpect(jsonPath("$.components.schemas.PasswordChangeRequest.properties.newPasswordConfirm").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.PasswordChangeRequest.properties.currentPassword.format").value("password"))
+                .andExpect(jsonPath("$.components.schemas.PasswordChangeRequest.properties.newPassword.format").value("password"));
+    }
+
+    @Test
+    void 중복확인은_쿼리_파라미터로_문서화된다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/users/email-availability'].get.parameters[?(@.name=='email' && @.in=='query')]").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/api/v1/users/nickname-availability'].get.parameters[?(@.name=='nickname' && @.in=='query')]").isNotEmpty());
+    }
+
+    @Test
+    void 문서와_Swagger_UI는_토큰_없이_열린다() throws Exception {
+        // T08 에서 permitAll 을 풀 때 Swagger 경로를 빠뜨리면 문서를 아무도 못 본다.
+        // 위 테스트들이 전부 토큰 없이 /v3/api-docs 를 부르고 있어 사실상 매번 확인되지만,
+        // 의도를 이름으로 남겨 둔다.
+        mockMvc.perform(get(DOCS)).andExpect(status().isOk());
+        mockMvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());
+    }
+
+    @Test
+    void 로그인이_필요한_API에만_자물쇠가_붙는다() throws Exception {
+        String reauth = "$.paths['/api/v1/users/me/password-verification'].post";
+        String patch = "$.paths['/api/v1/users/me'].patch";
+        String signup = "$.paths['/api/v1/users'].post";
+        String emailCheck = "$.paths['/api/v1/users/email-availability'].get";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(reauth + ".security[0].bearerAuth").exists())
+                .andExpect(jsonPath(patch + ".security[0].bearerAuth").exists())
+                // 로그인 없이 부르는 API 에는 붙지 않는다
+                .andExpect(jsonPath(signup + ".security").doesNotExist())
+                .andExpect(jsonPath(emailCheck + ".security").doesNotExist());
+    }
+
+    @Test
+    void LoginUser는_요청_파라미터로_새어나가지_않는다() throws Exception {
+        // body 만 받는 인증 API 라 요청 파라미터가 하나도 없어야 한다.
+        // (T08 전에는 개발용 X-User-Id 헤더가 있어서 "userId 가 없는지"만 볼 수 있었다)
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me/password-verification'].post.parameters").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.parameters").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.LoginUser").doesNotExist());
+    }
+
+    @Test
+    void 실패_응답은_공통_에러_형식을_가리킨다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/users'].post.responses['409'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath("$.paths['/api/v1/users/me'].patch.responses['404'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.code").exists());
+    }
+
+    @Test
+    void 요청_스키마에_검증_규칙과_예시가_반영된다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.components.schemas.SignupRequest.required").isArray())
+                .andExpect(jsonPath("$.components.schemas.SignupRequest.properties.email.maxLength").value(100))
+                .andExpect(jsonPath("$.components.schemas.SignupRequest.properties.email.example").value("user@example.com"))
+                .andExpect(jsonPath("$.components.schemas.SignupRequest.properties.password.format").value("password"))
+                .andExpect(jsonPath("$.components.schemas.SignupRequest.properties.nickname.pattern").exists());
+    }
+
+    @Test
+    void 게시글_API_5개가_문서에_나온다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.summary").value("게시글 작성 (FN-PST-001)"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].get.summary").value("게시글 목록·검색·내 글 (PST-02, FN-PST-006)"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.summary").value("게시글 상세 조회 (FN-PST-002)"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].patch.summary").value("게시글 수정 (FN-PST-003)"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.summary").value("게시글 삭제 (FN-PST-004)"));
+    }
+
+    /**
+     * 목록·검색·내 글을 핸들러 하나로 합쳤다(S1). 조건은 모두 선택이라 author 도 필수가 아니다.
+     * PostSearchRequest 의 필드가 쿼리 파라미터로 하나씩 문서에 나와야 Swagger UI 에서 바로 검색해 볼 수 있다.
+     */
+    @Test
+    void 목록_검색은_조건을_쿼리_파라미터로_문서화한다() throws Exception {
+        String search = "$.paths['/api/v1/posts'].get";
+
+        var result = mockMvc.perform(get(DOCS));
+        for (String name : new String[]{"keyword", "title", "nickname", "hashtag", "date", "author", "page", "size"}) {
+            result.andExpect(jsonPath(search + ".parameters[?(@.name=='" + name + "' && @.in=='query')]").isNotEmpty());
+        }
+        result.andExpect(jsonPath(search + ".parameters[?(@.name=='author')].required").value(false));
+    }
+
+    @Test
+    void 게시글_API는_모두_로그인이_필요하다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].get.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].patch.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.security[0].bearerAuth").exists())
+                // LoginUser 는 전역 설정으로 숨겨져 있어서 요청 파라미터로 새어 나오지 않는다.
+                // 개발용 헤더까지 없앤 지금은 이 오퍼레이션에 파라미터가 아예 없다 (T08).
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.parameters").doesNotExist());
+    }
+
+    @Test
+    void 게시글_성공_응답은_응답_DTO_스키마를_가리킨다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.responses['201'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/PostCreateResponse"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.responses['200'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/PostResponse"))
+                .andExpect(jsonPath("$.components.schemas.PostResponse.properties.isMine").exists())
+                .andExpect(jsonPath("$.components.schemas.PostResponse.properties.author").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].get.responses['200'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/PostPageResponse"))
+                // 삭제는 돌려줄 내용이 없어서 204 에 본문 스키마가 붙지 않는다
+                .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.responses['204'].content").doesNotExist());
+    }
+
+    @Test
+    void 게시글_실패_응답은_공통_에러_형식을_가리킨다() throws Exception {
+        String detail = "$.paths['/api/v1/posts/{postId}']";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].post.responses['400'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath(detail + ".get.responses['404'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath(detail + ".patch.responses['403'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath(detail + ".delete.responses['401'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"));
+    }
+
+    @Test
+    void 게시글_DTO에_설명과_예시가_반영된다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                // @Size(max = 100) 이 스키마에 자동 반영되므로 @Schema 에 maxLength 를 적지 않는다
+                .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.title.maxLength").value(100))
+                .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.title.example").exists())
+                .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.hashtags.description").exists())
+                .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.hashtags.example[0]").value("여행"))
+                .andExpect(jsonPath("$.components.schemas.PostPageResponse.properties.size.example").value(10))
+                .andExpect(jsonPath("$.components.schemas.PostSummaryResponse.properties.nickname.description").exists());
+    }
+
+    @Test
+    void 공통_에러_형식에_설명과_예시가_붙는다() throws Exception {
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.status.example").value(400))
+                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.code.example").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.components.schemas.ErrorResponse.properties.errors.description").exists())
+                .andExpect(jsonPath("$.components.schemas.FieldError.properties.field.example").value("title"))
+                .andExpect(jsonPath("$.components.schemas.FieldError.properties.reason.example").value("제목은 필수입니다."));
+    }
+
+    @Test
+    void 로그인_API는_인증_없이_부르고_토큰_응답_스키마를_가리킨다() throws Exception {
+        String login = "$.paths['/api/v1/auth/tokens'].post";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(login + ".summary").value("로그인 (AUTH-01)"))
+                // 로그인 전에 부르는 API 라 자물쇠가 붙지 않는다
+                .andExpect(jsonPath(login + ".security").doesNotExist())
+                .andExpect(jsonPath(login + ".parameters").doesNotExist())
+                .andExpect(jsonPath(login + ".responses['200'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/LoginResponse"))
+                .andExpect(jsonPath(login + ".responses['401'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath("$.components.schemas.LoginRequest.properties.password.format").value("password"))
+                .andExpect(jsonPath("$.components.schemas.LoginResponse.properties.user").exists())
+                // 응답 안의 회원 요약이 LoginUser 스키마로 새어 나오지 않는다
+                .andExpect(jsonPath("$.components.schemas.LoginUser").doesNotExist());
+    }
+
+    @Test
+    void 로그아웃_API는_같은_경로의_DELETE이고_인증이_필요하다() throws Exception {
+        // 같은 /auth/tokens 를 POST(공개) 와 DELETE(인증) 가 나눠 쓴다. T08 의 매처도 메서드 단위여야 한다.
+        String logout = "$.paths['/api/v1/auth/tokens'].delete";
+
+        mockMvc.perform(get(DOCS))
+                .andExpect(jsonPath(logout + ".summary").value("로그아웃 (AUTH-02)"))
+                .andExpect(jsonPath(logout + ".security[0].bearerAuth").exists())
+                .andExpect(jsonPath(logout + ".responses['204']").exists())
+                .andExpect(jsonPath(logout + ".responses['401'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"));
+    }
+
+    @Test
+    void Swagger_UI_페이지가_열린다() throws Exception {
+        mockMvc.perform(get("/swagger-ui/index.html"))
+                .andExpect(status().isOk());
+    }
+
+    /**
+     * T17-2 마감 점검. 문서의 모든 API 가 다음을 지키는지 한 번에 본다.
+     * <ul>
+     *   <li>요약에 명세 기능 ID 가 있다 (예: {@code (AUTH-01)}, {@code (MBR-08)}, {@code (FN-PST-002)})</li>
+     *   <li>로그인이 필요한 API(자물쇠)는 401 응답을 적었다</li>
+     *   <li>경로에 {@code {postId}} 가 있는 API 는 404 응답을 적었다</li>
+     *   <li>남의 글을 건드릴 수 있는 수정·삭제는 403 응답을 적었다</li>
+     * </ul>
+     */
+    @Test
+    void 모든_API는_기능_ID와_401_403_404_응답을_문서에_적는다() throws Exception {
+        String docs = mockMvc.perform(get(DOCS)).andReturn().getResponse().getContentAsString();
+        Map<String, Map<String, Map<String, Object>>> paths = JsonPath.read(docs, "$.paths");
+
+        List<String> problems = new ArrayList<>();
+        paths.forEach((path, operations) -> operations.forEach((method, operation) -> {
+            String api = method.toUpperCase() + " " + path;
+            String summary = (String) operation.get("summary");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> responses = (Map<String, Object>) operation.get("responses");
+
+            if (summary == null || !summary.matches(".*\\((.*, )?(AUTH|MBR|FN-PST|PST)-\\d+.*\\)$")) {
+                problems.add(api + ": 요약에 기능 ID 없음 (" + summary + ")");
+            }
+            if (operation.containsKey("security") && !responses.containsKey("401")) {
+                problems.add(api + ": 401 응답 없음");
+            }
+            if (path.contains("{postId}") && !responses.containsKey("404")) {
+                problems.add(api + ": 404 응답 없음");
+            }
+            if (path.contains("{postId}") && !method.equals("get") && !responses.containsKey("403")) {
+                problems.add(api + ": 403 응답 없음");
+            }
+        }));
+
+        assertThat(paths).hasSize(12);
+        assertThat(paths.values().stream().mapToInt(Map::size).sum()).as("API 수").isEqualTo(16);
+        assertThat(problems).isEmpty();
+    }
+}
