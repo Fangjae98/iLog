@@ -34,7 +34,7 @@ public class AuthController {
     private final AuthService authService;
     private final TemporaryPasswordService temporaryPasswordService;
 
-    @Operation(summary = "로그인 (토큰 발급)",
+    @Operation(summary = "로그인 (AUTH-01)",
             description = """
                     이메일·비밀번호로 accessToken 을 발급한다. 로그인 없이 호출한다.
                     이후 로그인이 필요한 API 는 `Authorization: Bearer {accessToken}` 헤더로 호출한다.

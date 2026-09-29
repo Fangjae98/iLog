@@ -7,6 +7,7 @@ import com.ilog.ilog.post.controller.PostController;
 import com.ilog.ilog.post.service.PostService;
 import com.ilog.ilog.user.controller.UserController;
 import com.ilog.ilog.user.service.UserService;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springdoc.core.configuration.SpringDocConfiguration;
 import org.springdoc.core.configuration.SpringDocSpecPropertiesConfiguration;
@@ -23,6 +24,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import com.ilog.ilog.support.SecuredSliceTestSupport;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -264,7 +270,7 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
         String login = "$.paths['/api/v1/auth/tokens'].post";
 
         mockMvc.perform(get(DOCS))
-                .andExpect(jsonPath(login + ".summary").value("로그인 (토큰 발급)"))
+                .andExpect(jsonPath(login + ".summary").value("로그인 (AUTH-01)"))
                 // 로그인 전에 부르는 API 라 자물쇠가 붙지 않는다
                 .andExpect(jsonPath(login + ".security").doesNotExist())
                 .andExpect(jsonPath(login + ".parameters").doesNotExist())
@@ -295,5 +301,45 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
     void Swagger_UI_페이지가_열린다() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * T17-2 마감 점검. 문서의 모든 API 가 다음을 지키는지 한 번에 본다.
+     * <ul>
+     *   <li>요약에 명세 기능 ID 가 있다 (예: {@code (AUTH-01)}, {@code (MBR-08)}, {@code (FN-PST-002)})</li>
+     *   <li>로그인이 필요한 API(자물쇠)는 401 응답을 적었다</li>
+     *   <li>경로에 {@code {postId}} 가 있는 API 는 404 응답을 적었다</li>
+     *   <li>남의 글을 건드릴 수 있는 수정·삭제는 403 응답을 적었다</li>
+     * </ul>
+     */
+    @Test
+    void 모든_API는_기능_ID와_401_403_404_응답을_문서에_적는다() throws Exception {
+        String docs = mockMvc.perform(get(DOCS)).andReturn().getResponse().getContentAsString();
+        Map<String, Map<String, Map<String, Object>>> paths = JsonPath.read(docs, "$.paths");
+
+        List<String> problems = new ArrayList<>();
+        paths.forEach((path, operations) -> operations.forEach((method, operation) -> {
+            String api = method.toUpperCase() + " " + path;
+            String summary = (String) operation.get("summary");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> responses = (Map<String, Object>) operation.get("responses");
+
+            if (summary == null || !summary.matches(".*\\((.*, )?(AUTH|MBR|FN-PST|PST)-\\d+.*\\)$")) {
+                problems.add(api + ": 요약에 기능 ID 없음 (" + summary + ")");
+            }
+            if (operation.containsKey("security") && !responses.containsKey("401")) {
+                problems.add(api + ": 401 응답 없음");
+            }
+            if (path.contains("{postId}") && !responses.containsKey("404")) {
+                problems.add(api + ": 404 응답 없음");
+            }
+            if (path.contains("{postId}") && !method.equals("get") && !responses.containsKey("403")) {
+                problems.add(api + ": 403 응답 없음");
+            }
+        }));
+
+        assertThat(paths).hasSize(12);
+        assertThat(paths.values().stream().mapToInt(Map::size).sum()).as("API 수").isEqualTo(16);
+        assertThat(problems).isEmpty();
     }
 }
