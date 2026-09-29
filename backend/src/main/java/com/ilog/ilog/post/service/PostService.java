@@ -7,16 +7,21 @@ import com.ilog.ilog.post.dto.PostCreateRequest;
 import com.ilog.ilog.post.dto.PostCreateResponse;
 import com.ilog.ilog.post.dto.PostPageResponse;
 import com.ilog.ilog.post.dto.PostResponse;
+import com.ilog.ilog.post.dto.PostSearchRequest;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.entity.Post;
 import com.ilog.ilog.post.repository.PostRepository;
+import com.ilog.ilog.post.repository.PostSpecs;
 import com.ilog.ilog.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /*
@@ -38,8 +43,8 @@ import java.util.List;
 @Transactional(readOnly = true)   // 기본은 "읽기 전용" 트랜잭션. 데이터를 바꾸는 메서드에만 따로 @Transactional을 붙인다
 public class PostService {
 
-    /** 내 게시글 조회에서 한 쪽에 보여 줄 글 개수 */
-    private static final int MY_POST_PAGE_SIZE = 5;
+    /** 목록 정렬: 최신 글이 위로, 작성 시각이 같으면 나중에 쓴 글(id가 큰 글)이 위로 (S4) */
+    private static final Sort LATEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     // new PostRepository() 하지 않아도 Spring이 만들어 둔 구현체를 넣어 준다.
     private final PostRepository postRepository;
@@ -91,20 +96,61 @@ public class PostService {
     }
 
     /**
-     * 내 게시글 조회 (명세 FN-PST-006)
+     * 게시글 목록·검색·내 글 조회 (PST-02, FN-PST-006, S1~S5)
      *
-     * 최신 글이 위로 오도록 정렬해서 한 쪽에 5개씩 돌려준다.
+     * 받은 조건만 골라 모두 만족하는 글(AND)을 최신순으로 한 쪽씩 돌려준다.
+     * 작성자가 탈퇴한 글은 조건과 상관없이 항상 뺀다. (P8)
      *
-     * @param userId 로그인한 회원 번호 → 이 사람이 쓴 글만 조회
-     * @param page     몇 번째 쪽인지 (0부터 시작)
+     * @param loginUserId 로그인한 회원 번호. author=me일 때 이 사람이 쓴 글만 찾는다
+     * @param request     검색 조건과 쪽 정보
      * @return 이번 쪽의 글 목록 + 전체 개수 같은 쪽 정보
      */
-    public PostPageResponse getMyPosts(Long userId, int page) {
-        // PageRequest.of(쪽 번호, 개수) = "몇 번째 쪽을 몇 개씩 달라"는 주문서
-        Page<Post> myPosts = postRepository.findByUserIdOrderByCreatedAtDesc(
-                userId, PageRequest.of(page, MY_POST_PAGE_SIZE));
+    public PostPageResponse search(Long loginUserId, PostSearchRequest request) {
+        List<Specification<Post>> conditions = new ArrayList<>();
+        conditions.add(PostSpecs.authorActive());
 
-        return PostPageResponse.fromPage(myPosts);
+        if (request.keyword() != null) {
+            conditions.add(PostSpecs.keyword(request.keyword()));
+        }
+        if (request.title() != null) {
+            conditions.add(PostSpecs.titleContains(request.title()));
+        }
+        if (request.nickname() != null) {
+            conditions.add(PostSpecs.nickname(request.nickname()));
+        }
+        List<String> tags = searchHashtags(request.hashtag());
+        if (!tags.isEmpty()) {
+            conditions.add(PostSpecs.hasAllTags(tags));
+        }
+        if (request.date() != null) {
+            conditions.add(PostSpecs.createdOn(request.date()));
+        }
+        if (request.onlyMine()) {
+            conditions.add(PostSpecs.writtenBy(loginUserId));
+        }
+
+        // PageRequest.of(쪽 번호, 개수, 정렬) = "몇 번째 쪽을 몇 개씩, 어떤 순서로 달라"는 주문서
+        // 작성 시각이 같은 글이 있어도 순서가 흔들리지 않게 id를 두 번째 기준으로 둔다. (S4)
+        Page<Post> posts = postRepository.findAll(Specification.allOf(conditions),
+                PageRequest.of(request.page(), request.size(), LATEST_FIRST));
+
+        return PostPageResponse.fromPage(posts);
+    }
+
+    /**
+     * 검색용 해시태그 다듬기.
+     * 저장과 같은 규칙으로 다듬어야 "#Spring"으로 검색해도 "spring" 태그가 붙은 글을 찾는다.
+     * 다듬은 뒤 빈 값은 무시하고, 10개를 넘으면 400으로 막는다. (서브쿼리 IN 목록이 끝없이 길어지지 않게)
+     */
+    private List<String> searchHashtags(List<String> rawHashtags) {
+        List<String> tags = PostPolicy.normalizeHashtags(rawHashtags).stream()
+                .filter(tag -> !tag.isEmpty())
+                .toList();
+
+        if (tags.size() > PostPolicy.HASHTAG_MAX_COUNT) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        return tags;
     }
 
     /**

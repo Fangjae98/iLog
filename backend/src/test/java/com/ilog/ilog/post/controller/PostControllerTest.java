@@ -4,6 +4,7 @@ import com.ilog.ilog.support.SecuredSliceTestSupport;
 import com.ilog.ilog.post.dto.PostAuthorResponse;
 import com.ilog.ilog.post.dto.PostCreateResponse;
 import com.ilog.ilog.post.dto.PostResponse;
+import com.ilog.ilog.post.dto.PostSearchRequest;
 import com.ilog.ilog.post.dto.PostUpdateRequest;
 import com.ilog.ilog.post.service.PostService;
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpHeaders;
@@ -18,12 +20,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -97,13 +101,48 @@ class PostControllerTest extends SecuredSliceTestSupport {
     }
 
     @Test
-    @DisplayName("author 를 빠뜨리면 500 이 아니라 400 INVALID_INPUT")
-    void author가_없으면_400() throws Exception {
-        // params = "author=me" 조건에 안 맞으면 UnsatisfiedServletRequestParameterException 이 나는데,
-        // GlobalExceptionHandler 가 받지 않으면 잘 만든 요청에도 500 이 나간다
-        mockMvc.perform(get("/api/v1/posts").header(HttpHeaders.AUTHORIZATION, bearer(1)))
+    @DisplayName("author 가 me 가 아니면 400 INVALID_INPUT")
+    void author가_me가_아니면_400() throws Exception {
+        // 목록·검색과 핸들러를 합쳐서(S1) author 는 선택 조건이 됐다. 쓸 수 있는 값은 me 하나다
+        mockMvc.perform(get("/api/v1/posts?author=you").header(HttpHeaders.AUTHORIZATION, bearer(1)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        verifyNoInteractions(postService);
+    }
+
+    // ---------- T15 목록·검색 요청 (S3, S4) ----------
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"size=51", "size=0", "date=2026-13-01", "date=2026/09/16", "page=abc"})
+    @DisplayName("쪽 크기·날짜·쪽 번호 형식이 틀리면 400 INVALID_INPUT")
+    void 검색_파라미터_형식_오류는_400(String query) throws Exception {
+        mockMvc.perform(get("/api/v1/posts?" + query).header(HttpHeaders.AUTHORIZATION, bearer(1)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    @DisplayName("조건 없이 부르면 0쪽, 10개로 조회한다")
+    void 조건_없으면_기본값() throws Exception {
+        mockMvc.perform(get("/api/v1/posts").header(HttpHeaders.AUTHORIZATION, bearer(1)))
+                .andExpect(status().isOk());
+
+        verify(postService).search(1L, new PostSearchRequest(null, null, null, null, null, null, null, null));
+        assertThat(new PostSearchRequest(null, null, null, null, null, null, null, null))
+                .extracting(PostSearchRequest::page, PostSearchRequest::size)
+                .containsExactly(0, 10);
+    }
+
+    @Test
+    @DisplayName("hashtag 를 반복해서 보내면 목록으로 받고, sort 같은 모르는 파라미터는 무시한다")
+    void 반복_해시태그와_sort_무시() throws Exception {
+        mockMvc.perform(get("/api/v1/posts?hashtag=spring&hashtag=jpa&date=2026-09-16&sort=createdAt,asc&size=50")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(1)))
+                .andExpect(status().isOk());
+
+        verify(postService).search(1L, new PostSearchRequest(null, null, null, List.of("spring", "jpa"),
+                LocalDate.of(2026, 9, 16), null, 0, 50));
     }
 
     // ---------- T13 입력 규칙 (P1, P2) ----------

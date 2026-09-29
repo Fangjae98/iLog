@@ -173,24 +173,25 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
     void 게시글_API_5개가_문서에_나온다() throws Exception {
         mockMvc.perform(get(DOCS))
                 .andExpect(jsonPath("$.paths['/api/v1/posts'].post.summary").value("게시글 작성 (FN-PST-001)"))
-                .andExpect(jsonPath("$.paths['/api/v1/posts'].get.summary").value("내 게시글 조회 (FN-PST-006)"))
+                .andExpect(jsonPath("$.paths['/api/v1/posts'].get.summary").value("게시글 목록·검색·내 글 (PST-02, FN-PST-006)"))
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].get.summary").value("게시글 상세 조회 (FN-PST-002)"))
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].patch.summary").value("게시글 수정 (FN-PST-003)"))
                 .andExpect(jsonPath("$.paths['/api/v1/posts/{postId}'].delete.summary").value("게시글 삭제 (FN-PST-004)"));
     }
 
     /**
-     * springdoc 은 params = "author=me" 조건을 문서로 옮기지 않아서 @Parameter 로 직접 적어 두었다.
-     * 이게 빠지면 Swagger UI 의 Try it out 이 author 없이 요청을 보내 500 이 난다.
+     * 목록·검색·내 글을 핸들러 하나로 합쳤다(S1). 조건은 모두 선택이라 author 도 필수가 아니다.
+     * PostSearchRequest 의 필드가 쿼리 파라미터로 하나씩 문서에 나와야 Swagger UI 에서 바로 검색해 볼 수 있다.
      */
     @Test
-    void 내_게시글_조회는_author와_page_쿼리로_문서화된다() throws Exception {
-        String myPosts = "$.paths['/api/v1/posts'].get";
+    void 목록_검색은_조건을_쿼리_파라미터로_문서화한다() throws Exception {
+        String search = "$.paths['/api/v1/posts'].get";
 
-        mockMvc.perform(get(DOCS))
-                .andExpect(jsonPath(myPosts + ".parameters[?(@.name=='author' && @.in=='query')]").isNotEmpty())
-                .andExpect(jsonPath(myPosts + ".parameters[?(@.name=='author')].required").value(true))
-                .andExpect(jsonPath(myPosts + ".parameters[?(@.name=='page' && @.in=='query')]").isNotEmpty());
+        var result = mockMvc.perform(get(DOCS));
+        for (String name : new String[]{"keyword", "title", "nickname", "hashtag", "date", "author", "page", "size"}) {
+            result.andExpect(jsonPath(search + ".parameters[?(@.name=='" + name + "' && @.in=='query')]").isNotEmpty());
+        }
+        result.andExpect(jsonPath(search + ".parameters[?(@.name=='author')].required").value(false));
     }
 
     @Test
@@ -244,7 +245,7 @@ class OpenApiDocsTest extends SecuredSliceTestSupport {
                 .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.title.example").exists())
                 .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.hashtags.description").exists())
                 .andExpect(jsonPath("$.components.schemas.PostCreateRequest.properties.hashtags.example[0]").value("여행"))
-                .andExpect(jsonPath("$.components.schemas.PostPageResponse.properties.size.example").value(5))
+                .andExpect(jsonPath("$.components.schemas.PostPageResponse.properties.size.example").value(10))
                 .andExpect(jsonPath("$.components.schemas.PostSummaryResponse.properties.nickname.description").exists());
     }
 
