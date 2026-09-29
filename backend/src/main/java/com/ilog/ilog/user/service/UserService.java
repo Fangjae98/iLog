@@ -9,6 +9,7 @@ import com.ilog.ilog.user.dto.NicknameAvailabilityResponse;
 import com.ilog.ilog.user.dto.NicknameUpdateResponse;
 import com.ilog.ilog.user.dto.PasswordVerificationResponse;
 import com.ilog.ilog.user.dto.SignupRequest;
+import com.ilog.ilog.user.dto.WithdrawalResponse;
 import com.ilog.ilog.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -128,6 +129,25 @@ public class UserService {
 
         user.changePassword(passwordEncoder.encode(newPassword));
         passwordHistoryService.record(userId, user.getPassword());
+    }
+
+    /**
+     * 회원 탈퇴 (MBR-08).
+     *
+     * <p>소프트 삭제다 (U1). {@code withdrawn_at} 만 채우고 행은 남겨서 30일 안에 복구할 수 있게 한다.
+     * 30일이 지나면 스케줄러(T12)가 행을 지운다.
+     *
+     * <p>비밀번호 불일치는 {@code PASSWORD_MISMATCH}(400)다. 401 이면 프론트가 로그아웃시킨다.
+     * 탈퇴 뒤 남은 토큰은 {@code JwtAuthenticationFilter} 가 회원 상태를 보고 401 로 막는다 (A6).
+     */
+    @Transactional
+    public WithdrawalResponse withdraw(Long userId, String password) {
+        User user = getActiveUser(userId);
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
+        }
+        user.withdraw(LocalDateTime.now());
+        return WithdrawalResponse.from(user);
     }
 
     /**

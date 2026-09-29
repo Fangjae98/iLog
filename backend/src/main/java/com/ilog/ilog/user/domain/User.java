@@ -107,4 +107,22 @@ public class User extends BaseTimeEntity {
     public void withdraw(LocalDateTime withdrawnAt) {
         this.withdrawnAt = withdrawnAt;
     }
+
+    /** 탈퇴 후 복구할 수 있는 마지막 시각 (U1: 탈퇴 시각 + 30일). 탈퇴하지 않았으면 null. */
+    public LocalDateTime recoverableUntil() {
+        return withdrawnAt == null ? null : withdrawnAt.plusDays(UserPolicy.WITHDRAWAL_RECOVERY_DAYS);
+    }
+
+    /**
+     * 탈퇴 상태이고 아직 복구 기간 안인지.
+     * 로그인(USER_WITHDRAWN 판정)·복구·탈퇴 응답이 같은 기준을 쓰도록 여기 한 곳에 둔다.
+     */
+    public boolean isRecoverable(LocalDateTime now) {
+        return isWithdrawn() && recoverableUntil().isAfter(now);
+    }
+
+    /** 탈퇴를 취소한다 (AUTH-04). 30일 경과 여부는 서비스에서 먼저 확인한다. */
+    public void restore() {
+        this.withdrawnAt = null;
+    }
 }

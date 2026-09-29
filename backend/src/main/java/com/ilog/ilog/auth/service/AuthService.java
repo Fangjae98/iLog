@@ -5,7 +5,6 @@ import com.ilog.ilog.global.auth.jwt.JwtTokenProvider;
 import com.ilog.ilog.global.error.BusinessException;
 import com.ilog.ilog.global.error.ErrorCode;
 import com.ilog.ilog.user.domain.User;
-import com.ilog.ilog.user.domain.UserPolicy;
 import com.ilog.ilog.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,11 +51,8 @@ public class AuthService {
         LocalDateTime now = LocalDateTime.now();
 
         if (user.isWithdrawn()) {
-            boolean recoverable = user.getWithdrawnAt()
-                    .plusDays(UserPolicy.WITHDRAWAL_RECOVERY_DAYS)
-                    .isAfter(now);
             // 복구 기간이 지났으면 곧 물리 삭제될 계정이라 존재를 알리지 않는다
-            throw new BusinessException(recoverable ? ErrorCode.USER_WITHDRAWN : ErrorCode.LOGIN_FAILED);
+            throw new BusinessException(user.isRecoverable(now) ? ErrorCode.USER_WITHDRAWN : ErrorCode.LOGIN_FAILED);
         }
 
         // 임시 비밀번호는 24시간만 유효하다 (U6). 만료되면 다시 발급받아야 한다.
@@ -66,6 +62,35 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.isTempPassword());
         return LoginResponse.of(accessToken, jwtTokenProvider.accessTokenValiditySeconds(), user);
+    }
+
+    /**
+     * 탈퇴 계정 복구 (AUTH-04).
+     *
+     * <p>복구만 하고 토큰은 주지 않는다 (U3). 프론트는 성공하면 로그인 화면으로 보낸다.
+     * <ol>
+     *   <li>없는 이메일·비밀번호 불일치 → {@code LOGIN_FAILED}. 로그인과 같이 둘을 구분하지 않는다</li>
+     *   <li>탈퇴 상태가 아니면 아무것도 바꾸지 않고 끝낸다. 두 번 눌러도 같은 결과(204)다</li>
+     *   <li>탈퇴 후 30일 경과 → {@code LOGIN_FAILED}. 곧 물리 삭제될 계정이라 존재를 알리지 않는다</li>
+     *   <li>{@code withdrawn_at} 을 비운다. {@code updated_at} 은 감사(auditing)가 갱신한다</li>
+     * </ol>
+     */
+    @Transactional
+    public void recover(String email, String rawPassword) {
+        User user = userRepository.findByEmail(normalizeEmail(email))
+                .orElseThrow(() -> new BusinessException(ErrorCode.LOGIN_FAILED));
+
+        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
+            throw new BusinessException(ErrorCode.LOGIN_FAILED);
+        }
+        if (!user.isWithdrawn()) {
+            return;
+        }
+
+        if (!user.isRecoverable(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.LOGIN_FAILED);
+        }
+        user.restore();
     }
 
     /** UserService.normalizeEmail 과 같은 규칙 (D-16). 가입 때 소문자로 저장하므로 조회도 소문자로 한다. */

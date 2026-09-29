@@ -22,4 +22,12 @@ public abstract class BaseTimeEntity {
     @LastModifiedDate
     @Column(name = "updated_at")          // 생성 시 null, 수정 시 기록
     private LocalDateTime updatedAt;
+
+    /**
+     * 값이 바뀌지 않은 수정 요청에서도 수정 일시를 남긴다 (게시글 P6).
+     * {@code @LastModifiedDate} 는 엔티티가 실제로 바뀌어 UPDATE 가 나갈 때만 채워지기 때문이다.
+     */
+    protected void markUpdated() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }

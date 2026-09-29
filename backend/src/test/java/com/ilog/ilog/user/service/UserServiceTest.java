@@ -8,6 +8,7 @@ import com.ilog.ilog.user.dto.NicknameAvailabilityResponse;
 import com.ilog.ilog.user.dto.NicknameUpdateResponse;
 import com.ilog.ilog.user.dto.PasswordVerificationResponse;
 import com.ilog.ilog.user.dto.SignupRequest;
+import com.ilog.ilog.user.dto.WithdrawalResponse;
 import com.ilog.ilog.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -370,6 +371,37 @@ class UserServiceTest {
 
         assertBusiness(() -> userService.changePassword(1L, RAW_PASSWORD, "NewPassw0rd!"),
                 ErrorCode.UNAUTHORIZED);
+    }
+
+    // ---------- 회원 탈퇴 (MBR-08) ----------
+
+    @Test
+    void 탈퇴하면_탈퇴_시각이_채워지고_30일_뒤를_복구_기한으로_돌려준다() {
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        WithdrawalResponse response = userService.withdraw(1L, RAW_PASSWORD);
+
+        assertThat(user.isWithdrawn()).isTrue();
+        assertThat(response.recoverableUntil()).isEqualTo(user.getWithdrawnAt().plusDays(30));
+    }
+
+    @Test
+    void 탈퇴_비밀번호가_틀리면_PASSWORD_MISMATCH_이고_탈퇴하지_않는다() {
+        User user = activeUser(1L, "a@b.com", "기택");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertBusiness(() -> userService.withdraw(1L, "Wrong0!pw"), ErrorCode.PASSWORD_MISMATCH);
+        assertThat(user.isWithdrawn()).isFalse();
+    }
+
+    @Test
+    void 이미_탈퇴한_회원은_다시_탈퇴할_수_없다() {
+        User withdrawn = activeUser(1L, "a@b.com", "기택");
+        withdrawn.withdraw(LocalDateTime.now().minusDays(1));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(withdrawn));
+
+        assertBusiness(() -> userService.withdraw(1L, RAW_PASSWORD), ErrorCode.UNAUTHORIZED);
     }
 
     private User activeUser(Long id, String email, String nickname) {

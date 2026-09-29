@@ -1,5 +1,6 @@
 package com.ilog.ilog.auth.controller;
 
+import com.ilog.ilog.auth.dto.AccountRecoveryRequest;
 import com.ilog.ilog.auth.dto.LoginRequest;
 import com.ilog.ilog.auth.dto.LoginResponse;
 import com.ilog.ilog.auth.dto.TemporaryPasswordRequest;
@@ -33,7 +34,7 @@ public class AuthController {
     private final AuthService authService;
     private final TemporaryPasswordService temporaryPasswordService;
 
-    @Operation(summary = "로그인 (토큰 발급)",
+    @Operation(summary = "로그인 (AUTH-01)",
             description = """
                     이메일·비밀번호로 accessToken 을 발급한다. 로그인 없이 호출한다.
                     이후 로그인이 필요한 API 는 `Authorization: Bearer {accessToken}` 헤더로 호출한다.
@@ -87,5 +88,22 @@ public class AuthController {
     public TemporaryPasswordResponse issueTemporaryPassword(
             @Valid @RequestBody TemporaryPasswordRequest request) {
         return temporaryPasswordService.issue(request.email(), request.name());
+    }
+
+    @Operation(summary = "탈퇴 계정 복구 (AUTH-04)",
+            description = """
+                    탈퇴 후 30일 안의 계정을 이메일·비밀번호로 복구한다. 로그인 없이 호출한다.
+                    복구만 하고 토큰은 주지 않는다(U3). 성공하면 프론트는 로그인 화면으로 이동한다.
+                    이미 활성 상태인 계정이면 아무것도 바꾸지 않고 204 를 준다(두 번 눌러도 같은 결과).
+                    로그인에서 403 `USER_WITHDRAWN` 을 받았을 때 이 API 를 부른다.""")
+    @ApiResponse(responseCode = "204", description = "복구 성공(또는 이미 활성 계정)")
+    @ApiResponse(responseCode = "400", description = "`INVALID_INPUT` — 이메일·비밀번호 누락",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "`LOGIN_FAILED` — 없는 이메일, 틀린 비밀번호, 탈퇴 후 30일이 지난 계정 (구분하지 않는다)",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @PostMapping("/account-recoveries")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void recoverAccount(@Valid @RequestBody AccountRecoveryRequest request) {
+        authService.recover(request.email(), request.password());
     }
 }
