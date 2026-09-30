@@ -149,3 +149,5 @@ Infra: 도커 관련 파일 추가
 - `.env`, `application-local.properties`는 **절대 커밋하지 마세요** (`.gitignore`에 등록되어 있습니다)
 - 비밀번호, API 키 등은 코드에 직접 적지 말고 환경변수로 관리합니다
 - 이 저장소는 **Public**이므로, 올리는 모든 내용이 외부에 공개됩니다
+
+testㅋ
