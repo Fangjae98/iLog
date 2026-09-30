@@ -1,27 +1,70 @@
-<!-- 임시 로그인 페이지 -->
+<!-- 로그인 페이지 -->
 
 <script setup>
 // 로그인 화면에 필요한 Vue 기능, 라우터, 공용 컴포넌트, 인증 store
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { authApi } from '@/api/auth'
 import FieldError from '@/components/common/FieldError.vue'
+import { useDialog } from '@/composables/useDialog'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute() //로그인 후 원래 가려던 주소 확인
 const router = useRouter() //로그인 성공 후 다른 주소로 이동
+const dialog = useDialog() //계정 복구 확인·완료 팝업 표시
 const auth = useAuthStore() //pinia store의 로그인 함수 실행
 
 // 로그인 입력값과 화면 상태
 const form = reactive({ email: '', password: '' })
 const submitting = ref(false)
 const formError = ref('')
-const withdrawn = ref(false)
 const fieldErrors = ref({})
+
+// 탈퇴 계정 복구 흐름
+// 1. 복구 여부 확인 팝업을 표시한다.
+// 2. 취소하면 입력값을 유지한 채 팝업만 닫는다.
+// 3. 복구하기를 누르면 이메일·비밀번호로 계정을 복구한다.
+// 4. 성공 팝업의 확인 버튼을 누르면 로그인 폼을 초기화한다.
+// 5. 실패하면 기존 로그인 오류 영역에 안내한다.
+async function recoverWithdrawnAccount() {
+  const confirmed = await dialog.confirm({
+    title: '탈퇴 처리된 계정이에요.',
+    description: '계정을 복구하시겠어요?',
+    confirmText: '복구하기',
+  })
+
+  // 취소한 경우 사용자가 입력한 이메일과 비밀번호를 그대로 둔다.
+  if (!confirmed) return
+
+  try {
+    await authApi.recoverAccount({
+      email: form.email,
+      password: form.password,
+    })
+
+    const acknowledged = await dialog.alert({
+      title: '계정이 복구됐어요.',
+      description: '기존 이메일과 비밀번호로 다시 로그인해 주세요.',
+      confirmText: '확인',
+    })
+
+    // 확인 버튼을 눌렀을 때만 새 로그인 화면처럼 폼을 초기화한다.
+    if (!acknowledged) return
+
+    // Mock 상태를 유지하기 위해 브라우저를 새로고침하지 않고 로그인 폼만 초기화한다.
+    form.email = ''
+    form.password = ''
+    formError.value = ''
+    fieldErrors.value = {}
+  } catch (error) {
+    formError.value = error.message
+    fieldErrors.value = error.fieldErrors ?? {}
+  }
+}
 
 // 입력값을 확인하고 로그인 결과에 따라 화면을 이동하거나 오류를 표시한다
 async function onSubmit() {
   formError.value = ''
-  withdrawn.value = false
   fieldErrors.value = {}
 
   // 빈 값이면 API 를 부르지 않는다
@@ -40,9 +83,11 @@ async function onSubmit() {
     router.replace(safe ? redirect : { name: 'post-list' })
   } catch (e) {
     // 로그인 실패 원인에 맞는 오류 상태를 저장
-    if (e.code === 'USER_WITHDRAWN') withdrawn.value = true
-    else formError.value = e.message
-    fieldErrors.value = e.fieldErrors ?? {}
+    if (e.code === 'USER_WITHDRAWN') await recoverWithdrawnAccount()
+    else {
+      formError.value = e.message
+      fieldErrors.value = e.fieldErrors ?? {}
+    }
   } finally {
     // 성공 여부와 관계없이 요청 중 상태를 종료
     submitting.value = false
@@ -67,8 +112,7 @@ async function onSubmit() {
       <h1>Login</h1>
       <!-- 로그인 만료 또는 탈퇴 계정 상태 안내 -->
       <p v-if="route.query.expired" class="notice">로그인이 만료되었어요. 다시 로그인해 주세요.</p>
-      <p v-if="withdrawn" class="notice notice-warn">탈퇴 처리된 계정이에요.</p>
-      <!-- TODO D-10: 필수 기능. 백엔드 계정 복구 API 구현 후 복구 버튼 연결 -->
+      <!-- 탈퇴 안내와 계정 복구 선택은 공용 다이얼로그에서 처리한다. -->
 
       <div class="field">
         <!-- 이메일 입력 및 이메일 관련 오류 표시 -->

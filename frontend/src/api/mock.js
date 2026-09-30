@@ -66,6 +66,14 @@ export const mockAuth = {
       passwordResetRequired: u.passwordResetRequired,
     }
   },
+  async recoverAccount({ email, password }) {
+    await delay()
+    const u = userByEmail(email)
+    // 실제 API처럼 존재하지 않는 계정과 틀린 비밀번호를 구분해 노출하지 않는다.
+    if (!u || u.password !== password) return fail(401, 'LOGIN_FAILED')
+    u.status = 'ACTIVE'
+    return null // 204
+  },
   async logout() {
     await delay(80)
     db.currentUserId = null
