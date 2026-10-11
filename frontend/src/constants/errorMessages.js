@@ -24,8 +24,8 @@ export const ERROR_MESSAGES = {
 
   // 게시글
   POST_NOT_FOUND: '삭제되었거나 존재하지 않는 글이에요.',
-  POST_NOT_OWNED: '본인이 작성한 글만 수정·삭제할 수 있어요.',
-  HASHTAG_NOT_FOUND: '이미 삭제된 해시태그예요.',
+  POST_NOT_OWNER: '본인이 작성한 글만 수정·삭제할 수 있어요.',
+  HASHTAG_LIMIT_EXCEEDED: '해시태그는 10개까지 넣을 수 있어요.',
 }
 
 const DEFAULT_MESSAGE = '요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.'

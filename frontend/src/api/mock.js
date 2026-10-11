@@ -190,6 +190,7 @@ export const mockPost = {
     await delay()
     const guard = requireLogin(); if (guard) return guard
     if (!title?.trim()) return fail(400, 'INVALID_INPUT', { title: '제목은 필수입니다' })
+    if (!content?.trim()) return fail(400, 'INVALID_INPUT', { content: '내용은 필수입니다' })
     const postId = db.seq++
     db.posts.push({
       postId, userId: db.currentUserId, title: title.trim(), content: content ?? '',
@@ -203,7 +204,7 @@ export const mockPost = {
     const guard = requireLogin(); if (guard) return guard
     const p = db.posts.find((x) => x.postId === Number(postId))
     if (!p) return fail(404, 'POST_NOT_FOUND')
-    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNED')
+    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNER')
     // 보낸 필드만 수정. 해시태그는 통째로 교체 (D-06)
     for (const key of ['title', 'content', 'urls', 'hashtags']) {
       if (body[key] !== undefined) p[key] = body[key]
@@ -216,7 +217,7 @@ export const mockPost = {
     const guard = requireLogin(); if (guard) return guard
     const p = db.posts.find((x) => x.postId === Number(postId))
     if (!p) return fail(404, 'POST_NOT_FOUND')
-    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNED')
+    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNER')
     db.posts = db.posts.filter((x) => x.postId !== p.postId)
     return null // 204
   },
