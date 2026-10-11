@@ -4,7 +4,7 @@
 - 작업일: 2026-10-12
 - 기준 계획서: `FEPROCEESS.MD` (0단계, 2~10시간차) + 계획서 밖 작업 1건(웹 글꼴)
 - 기준 브랜치: `fe` (`3ecf215`)
-- 상태: 세 브랜치 push 완료. **PR 생성 전**
+- 상태: **PR #29로 `fe`에 머지 완료** (`3d5bdbb`). `develop`에는 아직 없음
 
 ---
 
@@ -37,7 +37,11 @@
 | `ed6a9df` | FE: 게시글 수정 구현 (PATCH 통째 교체, POST_NOT_OWNER 처리) |
 | `d7404ba` | FE: 디자인 토큰이 쓰는 웹 글꼴(Gaegu, Noto Sans KR, IBM Plex Mono) 불러오기 |
 
-`d7404ba`는 게시글 범위 밖의 공용 파일 수정입니다. 지금은 `feat/fe/post-write` 맨 위에 있어 그대로 두면 PR ③에 포함됩니다.
+`d7404ba`는 게시글 범위 밖의 공용 파일 수정입니다.
+
+### 머지
+
+계획은 PR 3개였지만, 브랜치가 차례로 쌓여 있어 PR #29(`feat/fe/post-write` → `fe`) 하나로 위 커밋 전부와 이 문서가 함께 머지되었습니다. `feat/fe/post-foundation`, `feat/fe/post-read`는 따로 PR을 내지 않습니다.
 
 ---
 
@@ -145,8 +149,8 @@
 - [ ] 360px 폭에서 목록·상세·글쓰기 확인
 - [ ] 브라우저에서 글꼴 적용 확인 (게시글 화면과 로그인·마이페이지 화면)
 - [ ] 예진님에게 공용 파일 수정 공유: `router/index.js`, `AppHeader.vue`, `errorMessages.js`, `rules.js`, `mock.js`, `index.html`(글꼴)
-- [ ] 글꼴 커밋 `d7404ba`를 PR ③에 둘지, PR ①로 옮기거나 따로 PR로 낼지 결정
-- [ ] PR ①부터 차례로 `git fetch origin` → `git rebase origin/fe` → push → PR 생성 (base를 `fe`로 변경)
+- [x] push와 PR 생성·머지: PR #29로 `fe`에 머지됨 (글꼴 커밋 포함)
+- [ ] `fe` → `develop` 머지 (팀 일정에 따름)
 
 ---
 
@@ -157,7 +161,7 @@
 | 가이드 코드 | 가이드 원문이 저장소에 없어 "가이드 코드로 교체" 부분은 정답지와 `origin/be` 코드를 대조해 직접 작성. 대상: `api/post.js`, `HashtagInput`의 `add`, `PostForm` 스크립트, `PostEditView`의 `onSubmit`, `AppHeader` |
 | 해시태그 개수 초과 | 정답지는 10개까지만 잘라 넣음. 여기서는 초과하면 넣지 않고 입력값을 남겨 고칠 수 있게 함 |
 | 헤더 탭 | 정답지의 ABOUT 탭은 `AboutView`가 범위 밖이라 넣지 않음 |
-| 브랜치 | PR ①·②가 머지되기 전이라 ②는 ① 위에, ③은 ② 위에서 땀. 앞 PR 머지 후 `git rebase origin/fe` 필요 |
+| 브랜치·PR | ②는 ① 위에, ③은 ② 위에서 땀. PR 3개로 나누지 않고 PR #29 하나로 머지됨 |
 
 ---
 
