@@ -45,7 +45,7 @@ watch(
   { immediate: true },
 )
 
-const active = computed(() => ['keyword', 'hashtag', 'nickname', 'date'].some((k) => props.initial[k]))
+const active = computed(() => ['keyword', 'hashtag', 'nickname', 'date', 'author'].some((k) => props.initial[k]))
 
 function onSubmit() {
   const value = text.value.trim()

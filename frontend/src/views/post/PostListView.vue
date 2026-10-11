@@ -45,14 +45,12 @@ import BasePagination from '@/components/common/BasePagination.vue'
 import PostSearchBar from '@/components/post/PostSearchBar.vue'
 import PostListItem from '@/components/post/PostListItem.vue'
 import { usePostStore } from '@/stores/post'
-import { useAuthStore } from '@/stores/auth'
 import { formatDotDate } from '@/utils/date'
 
 const route = useRoute()
 const router = useRouter()
 const postStore = usePostStore()
 const { items, pageInfo, loading, error } = storeToRefs(postStore)
-const auth = useAuthStore()
 
 // @metric TBT, INP: 한 번에 그리는 행 수를 제한한다
 const PAGE_SIZE = 10
@@ -67,6 +65,7 @@ function toApiParams(q) {
     hashtag: [].concat(q.hashtag ?? []), // 1개면 문자열, 여러 개면 배열로 옴
     nickname: q.nickname,
     date: q.date,
+    author: q.author, // 'me' 면 내 글만. 닉네임이 바뀌어도 서버가 로그인 회원으로 찾는다
   }
   return Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length)),
@@ -92,7 +91,7 @@ function searchTag(tag) {
   router.push({ query: { hashtag: tag, page: 1 } })
 }
 function showMyPosts() {
-  router.push({ query: { nickname: auth.user.nickname, page: 1 } })
+  router.push({ query: { author: 'me', page: 1 } })
 }
 function reload() {
   postStore.fetchList(toApiParams(route.query))

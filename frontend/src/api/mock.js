@@ -156,7 +156,7 @@ export const mockPost = {
   async list(params = {}) {
     await delay()
     const guard = requireLogin(); if (guard) return guard
-    const { page = 0, size = 10, keyword, nickname, date } = params
+    const { page = 0, size = 10, keyword, nickname, date, author } = params
     const hashtags = [].concat(params.hashtag ?? [])
 
     let rows = db.posts.filter((p) => {
@@ -165,6 +165,7 @@ export const mockPost = {
         if (!p.title.toLowerCase().includes(k) && !p.content.toLowerCase().includes(k)) return false
       }
       if (nickname && userById(p.userId).nickname !== nickname) return false
+      if (author === 'me' && p.userId !== db.currentUserId) return false
       if (date && p.createdAt.slice(0, 10) !== date) return false
       if (hashtags.length && !hashtags.every((t) => p.hashtags.includes(t))) return false
       return true
