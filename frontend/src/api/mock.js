@@ -156,7 +156,7 @@ export const mockPost = {
   async list(params = {}) {
     await delay()
     const guard = requireLogin(); if (guard) return guard
-    const { page = 0, size = 10, keyword, nickname, date } = params
+    const { page = 0, size = 10, keyword, nickname, date, author } = params
     const hashtags = [].concat(params.hashtag ?? [])
 
     let rows = db.posts.filter((p) => {
@@ -165,6 +165,7 @@ export const mockPost = {
         if (!p.title.toLowerCase().includes(k) && !p.content.toLowerCase().includes(k)) return false
       }
       if (nickname && userById(p.userId).nickname !== nickname) return false
+      if (author === 'me' && p.userId !== db.currentUserId) return false
       if (date && p.createdAt.slice(0, 10) !== date) return false
       if (hashtags.length && !hashtags.every((t) => p.hashtags.includes(t))) return false
       return true
@@ -190,6 +191,7 @@ export const mockPost = {
     await delay()
     const guard = requireLogin(); if (guard) return guard
     if (!title?.trim()) return fail(400, 'INVALID_INPUT', { title: '제목은 필수입니다' })
+    if (!content?.trim()) return fail(400, 'INVALID_INPUT', { content: '내용은 필수입니다' })
     const postId = db.seq++
     db.posts.push({
       postId, userId: db.currentUserId, title: title.trim(), content: content ?? '',
@@ -203,7 +205,7 @@ export const mockPost = {
     const guard = requireLogin(); if (guard) return guard
     const p = db.posts.find((x) => x.postId === Number(postId))
     if (!p) return fail(404, 'POST_NOT_FOUND')
-    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNED')
+    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNER')
     // 보낸 필드만 수정. 해시태그는 통째로 교체 (D-06)
     for (const key of ['title', 'content', 'urls', 'hashtags']) {
       if (body[key] !== undefined) p[key] = body[key]
@@ -216,7 +218,7 @@ export const mockPost = {
     const guard = requireLogin(); if (guard) return guard
     const p = db.posts.find((x) => x.postId === Number(postId))
     if (!p) return fail(404, 'POST_NOT_FOUND')
-    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNED')
+    if (p.userId !== db.currentUserId) return fail(403, 'POST_NOT_OWNER')
     db.posts = db.posts.filter((x) => x.postId !== p.postId)
     return null // 204
   },
