@@ -5,10 +5,12 @@ export const RULES = {
   NICKNAME_PATTERN: /^[가-힣A-Za-z0-9]{2,10}$/,
   NICKNAME_MIN: 2,
   NICKNAME_MAX: 10,
-  TITLE_MAX: 100,         // 응답 명세 요청 표: 1~100자 (D-08 최종 확정 필요)
-  TITLE_MIN: null,        // TODO U-2 (와이어프레임 메모 "3글자 이상이어야 할 것 같음")
-  CONTENT_MAX: null,      // TODO D-08
-  URL_MAX_COUNT: null,    // TODO D-08
-  HASHTAG_MAX_COUNT: null,// TODO D-09
-  HASHTAG_MAX_LENGTH: 50, // 응답 명세 요청 표: 각 1~50자 (D-09 최종 확정 필요)
+  // 게시글. 백엔드 PostPolicy와 같은 값이어야 한다.
+  TITLE_MAX: 100,
+  CONTENT_MAX: 1000,
+  URL_MAX_COUNT: 5,
+  URL_MAX_LENGTH: 2048,
+  HASHTAG_MAX_COUNT: 10,
+  HASHTAG_MAX_LENGTH: 20,
+  HASHTAG_PATTERN: /^[가-힣a-z0-9_]{1,20}$/, // 다듬은 뒤(# 제거·소문자)의 값에 적용
 }
