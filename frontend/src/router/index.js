@@ -5,8 +5,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes = [
+  // 첫 화면은 게시글 목록. 비로그인 사용자는 가드가 로그인으로 보낸다.
+  { path: '/', redirect: '/posts' },
+
   // 비로그인 전용
-  { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue'), meta: { guestOnly: true } },
   { path: '/signup', name: 'signup', component: () => import('@/views/auth/SignupView.vue'), meta: { guestOnly: true } },
   { path: '/password/find', name: 'password-find', component: () => import('@/views/auth/PasswordFindView.vue'), meta: { guestOnly: true } },
@@ -14,6 +16,15 @@ const routes = [
   // 로그인 필요
   { path: '/password/change', name: 'password-change', component: () => import('@/views/auth/PasswordChangeView.vue'), meta: { requiresAuth: true } },
   { path: '/mypage', name: 'mypage', component: () => import('@/views/user/MyPageView.vue'), meta: { requiresAuth: true } },
+
+  // 게시글. postId는 숫자만 받아 /posts/new가 상세로 잡히지 않게 한다.
+  { path: '/posts', name: 'post-list', component: () => import('@/views/post/PostListView.vue'), meta: { requiresAuth: true } },
+  { path: '/posts/new', name: 'post-write', component: () => import('@/views/post/PostWriteView.vue'), meta: { requiresAuth: true } },
+  { path: '/posts/:postId(\\d+)', name: 'post-detail', component: () => import('@/views/post/PostDetailView.vue'), props: true, meta: { requiresAuth: true } },
+  { path: '/posts/:postId(\\d+)/edit', name: 'post-edit', component: () => import('@/views/post/PostEditView.vue'), props: true, meta: { requiresAuth: true } },
+
+  // 등록되지 않은 주소. 반드시 맨 끝에 둔다.
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
 ]
 
 const router = createRouter({
